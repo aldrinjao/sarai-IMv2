@@ -4,8 +4,8 @@
   width: 100%;
   font-size: 1em;
   color: white;
-  background-color: black;
-  padding: 1em 0;
+  background-color: #002D1B;
+  padding: .8em 0;
   margin: 0;
 }
 
@@ -31,6 +31,7 @@
 .headerLinks {
   display: flex;
   list-style: none;
+  align-items: center;
   padding: 0;
   margin: 0;
 

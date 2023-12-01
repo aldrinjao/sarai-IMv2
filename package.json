@@ -1,24 +1,24 @@
 {
-  "name": "next-leaflet-starter",
-  "homepage": "https://next-leaflet-starter.netlify.app",
+  "name": "sarai_interactive_map_2",
+  "homepage": "https://sarai.ph/",
   "version": "0.1.0",
   "license": "MIT",
-  "author": "Colby Fayock <hello@colbyfayock.com>",
+  "author": "Aldrin Hao",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "export": "next build && next export",
     "start": "next start"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/colbyfayock/next-leaflet-starter"
-  },
-  "bugs": {
-    "url": "https://github.com/colbyfayock/next-leaflet-starter/issues"
-  },
   "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@google/earthengine": "^0.1.374",
+    "@mui/icons-material": "^5.14.19",
+    "@mui/material": "^5.14.19",
+    "axios": "^1.5.1",
     "copy-webpack-plugin": "^11.0.0",
+    "cors-anywhere": "^0.4.4",
     "leaflet": "^1.9.4",
     "next": "^13.4.19",
     "react": "^18.2.0",
