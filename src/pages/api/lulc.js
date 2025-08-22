@@ -1,103 +1,196 @@
-import key from './_key.json';
+const ee = require('@google/earthengine');
+const privateKey = require('./ee_key.json');
 
-export default async function handler(req, res) {
+let isInitialized = false;
 
-  var ee = require('@google/earthengine');
-  var generateMap = () => {
-
-    var lulc = ee.ImageCollection('projects/sat-io/open-datasets/landcover/ESRI_Global-LULC_10m_TS');
-
-
-    var dict = {
-      "names": [
-        "Water",
-        "Trees",
-        "Flooded Vegetation",
-        "Crops",
-        "Built Area",
-        "Bare Ground",
-        "Snow/Ice",
-        "Clouds",
-        "Rangeland"
-      ],
-      
-      "colors": [
-        "#1A5BAB",
-        "#358221",
-        "#87D19E",
-        "#FFDB5C",
-        "#ED022A",
-        "#EDE9E4",
-        "#F2FAFF",
-        "#C8C8C8",
-        "#C6AD8D"
-      ]
-    };
-
-
-    function remapper(image) {
-      var remapped = image.remap([1, 2, 4, 5, 7, 8, 9, 10, 11], [1, 2, 3, 4, 5, 6, 7, 8, 9])
-      return remapped
+const initializeEE = () => {
+  return new Promise((resolve, reject) => {
+    if (isInitialized) {
+      resolve();
+      return;
     }
 
-    // This is palette has '#000000' for value 3 and 6.
-    var palette = [
-      "#1A5BAB",
-      "#358221",
-      "#000000",
-      "#87D19E",
-      "#FFDB5C",
-      "#000000",
-      "#ED022A",
-      "#EDE9E4",
-      "#F2FAFF",
-      "#C8C8C8",
-      "#C6AD8D",
+    console.log('Authenticating with Earth Engine...');
+
+    // Authenticate using the private key
+    ee.data.authenticateViaPrivateKey(
+      privateKey,
+      () => {
+        console.log('Authentication succeeded!');
+        // Initialize Earth Engine after successful authentication
+        ee.initialize(
+          null,
+          null,
+          () => {
+            console.log('Earth Engine client library initialized.');
+            isInitialized = true;
+            resolve();
+          },
+          (err) => {
+            console.error('Failed to initialize Earth Engine:', err);
+            reject(err);
+          }
+        );
+      },
+      (err) => {
+        console.error('Authentication failed:', err);
+        reject(err);
+      }
+    );
+  });
+};
+
+// Utility function to validate date format
+const isValidDate = (dateString) => {
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date) && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
+};
+
+// Utility function to get date range boundaries
+const getDateBoundaries = (startDate, endDate) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  // Ensure end date is after start date
+  if (end <= start) {
+    throw new Error('End date must be after start date');
+  }
+
+  // Check if date range is reasonable (not more than 10 years)
+  const diffYears = (end - start) / (1000 * 60 * 60 * 24 * 365);
+  if (diffYears > 10) {
+    throw new Error('Date range cannot exceed 10 years');
+  }
+
+  return { start, end };
+};
+
+export default async function handler(req, res) {
+  try {
+    console.log('API endpoint called');
+
+    // Extract date parameters from query string
+    const { startDate, endDate } = req.query;
+
+    // Set default dates if not provided
+    const defaultStartDate = '2017-01-01';
+    const defaultEndDate = '2017-12-31';
+
+    const finalStartDate = startDate || defaultStartDate;
+    const finalEndDate = endDate || defaultEndDate;
+
+    console.log(`Date range: ${finalStartDate} to ${finalEndDate}`);
+
+    // Validate date formats
+    if (!isValidDate(finalStartDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid start date format. Use YYYY-MM-DD format.'
+      });
+    }
+
+    if (!isValidDate(finalEndDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid end date format. Use YYYY-MM-DD format.'
+      });
+    }
+
+    // Validate date range
+    try {
+      getDateBoundaries(finalStartDate, finalEndDate);
+    } catch (dateError) {
+      return res.status(400).json({
+        success: false,
+        error: dateError.message
+      });
+    }
+
+    // Initialize Earth Engine if not already done
+    await initializeEE();
+
+    console.log('Creating Earth Engine objects...');
+
+    const lulc = ee.ImageCollection('projects/sat-io/open-datasets/landcover/ESRI_Global-LULC_10m_TS');
+
+    const colors = [
+      "#1A5BAB", // Water
+      "#358221", // Trees
+      "#87D19E", // Flooded Vegetation
+      "#FFDB5C", // Crops
+      "#ED022A", // Built Area
+      "#EDE9E4", // Bare Ground
+      "#F2FAFF", // Snow/Ice
+      "#C8C8C8", // Clouds
+      "#C6AD8D"  // Rangeland
     ];
 
 
-    var roi = ee.Geometry.Polygon(
-      [[
-        [127.94248139921513, 5.33459854167601],
-        [126.74931782819613, 11.825234466620996],
-        [124.51107186428203, 17.961503806746318],
-        [121.42999903167879, 19.993626604011016],
-        [118.25656974884657, 18.2117821750514],
-        [116.27168958893185, 6.817365082528201],
-        [122.50121143769957, 3.79887124351577],
-        [127.94248139921513, 5.33459854167601]
-      ]], null, false);
+    var roi = ee.FeatureCollection('WM/geoLab/geoBoundaries/600/ADM0')
+      .filter(ee.Filter.eq('shapeName', 'Philippines'))
+      .first()
+      .geometry();
 
+    console.log('Processing image collection...');
 
-    // Define a time range
-    var startDate = '2017-01-01';
-    var endDate = '2017-12-31';
+    // Process the image collection with dynamic date filtering
+    const image = lulc
+      .filterDate(finalStartDate, finalEndDate)
+      .filterBounds(roi)
+      .mosaic()
+      .remap([1, 2, 4, 5, 7, 8, 9, 10, 11], [1, 2, 3, 4, 5, 6, 7, 8, 9])
+      .clip(roi);
 
-    // Filter the image collection based on the ROI and time range
-    var filteredCollection = ee.ImageCollection(lulc.filterDate(startDate,endDate).filterBounds(roi).mosaic()).map(remapper).toBands();
-
-    var clippedImage = filteredCollection.clip(roi);
-
-    // Get the median NDVI image
-
-    // Define visualization parameters
-    var visParams = {
+    // Visualization parameters
+    const visParams = {
       min: 1,
       max: 9,
-      palette: dict.colors
+      palette: colors
     };
 
-    var mapUrl = clippedImage.getMap(visParams);
-    res.statusCode = 200;
-    res.end(JSON.stringify(mapUrl));
+    console.log('Getting map URL...');
 
+    // Get the map URL
+    const mapUrl = image.getMap(visParams);
 
+    console.log('Sending response...');
+
+    // Send response with additional metadata
+    res.status(200).json({
+      success: true,
+      mapUrl: mapUrl,
+      metadata: {
+        startDate: finalStartDate,
+        endDate: finalEndDate,
+        region: 'Philippines',
+        dataset: 'ESRI Global Land Use Land Cover',
+        totalDays: Math.ceil((new Date(finalEndDate) - new Date(finalStartDate)) / (1000 * 60 * 60 * 24)),
+        colors: {
+          water: colors[0],
+          trees: colors[1],
+          floodedVegetation: colors[2],
+          crops: colors[3],
+          builtArea: colors[4],
+          bareGround: colors[5],
+          snowIce: colors[6],
+          clouds: colors[7],
+          rangeland: colors[8]
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in handler:', error);
+
+    // Send detailed error response
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Internal server error',
+      timestamp: new Date().toISOString(),
+      requestParams: {
+        startDate: req.query.startDate,
+        endDate: req.query.endDate
+      }
+    });
   }
-
-
-  ee.data.authenticateViaPrivateKey(key, generateMap, function (error) {
-    console.error('Error authenticating with Earth Engine: ' + error);
-    res.status(500).send('Internal Server Error');
-  });
-
 }
