@@ -299,7 +299,7 @@ const ControlPanel = ({
           color: '#6c757d',
           lineHeight: '1.4'
         }}>
-          Select date ranges to explore {layerOptions.find(l => l.id === selectedLayer)?.fullName.toLowerCase()} changes over time.
+          Select date ranges to explore {layerOptions.find(l => l.id === selectedLayer)?.fullName.toLowerCase()} over time.
         </p>
       </div>
       

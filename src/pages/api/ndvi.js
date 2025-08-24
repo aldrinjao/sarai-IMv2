@@ -77,8 +77,8 @@ export default async function handler(req, res) {
         const { startDate, endDate } = req.query;
 
         // Set default dates if not provided
-        const defaultStartDate = '2017-01-01';
-        const defaultEndDate = '2017-12-31';
+        const defaultStartDate = '2025-01-01';
+        const defaultEndDate = '2025-12-31';
 
         const finalStartDate = startDate || defaultStartDate;
         const finalEndDate = endDate || defaultEndDate;
@@ -128,8 +128,7 @@ export default async function handler(req, res) {
 
         // Process the image collection
         const ndviCollection = ee.ImageCollection('MODIS/061/MYD13Q1').select('NDVI')
-            .filterDate(finalStartDate, finalEndDate)
-            .filterBounds(roi).clip(roi);
+            .filterDate(finalStartDate, finalEndDate).map(image => image.clip(roi));
         // Calculate median NDVI for the time period
 
 
@@ -158,7 +157,6 @@ export default async function handler(req, res) {
         // Calculate collection info
         // Use a promise to get the size asynchronously
         const collectionSize = await ndviCollection.size().getInfo();
-        console.log(collectionSize);
 
         // Send response with additional metadata
         res.status(200).json({

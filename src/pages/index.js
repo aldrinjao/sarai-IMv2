@@ -17,15 +17,17 @@ export default function Home() {
   const [mapUrl, setMapUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [startDate, setStartDate] = useState('2017-01-01');
-  const [endDate, setEndDate] = useState('2017-12-31');
+
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
   const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedLayer, setSelectedLayer] = useState(null);
 
-  const [selectedLayer, setSelectedLayer] = useState(null); // New state for layer selection
-
+  // New state for control panel visibility
+  const [isPanelVisible, setIsPanelVisible] = useState(true);
 
   const fetchMapData = async (start = startDate, end = endDate, layerType = selectedLayer) => {
-
     if (!layerType) {
       console.log('No layer selected, skipping fetch');
       setLoading(false);
@@ -33,57 +35,60 @@ export default function Home() {
     }
 
     try {
-      console.log(`Fetching map data for ${start} to ${end}...`);
       setIsUpdating(true);
       setError(null);
 
-
       // Use the appropriate endpoint based on layer type
       const endpoint = layerType === 'ndvi' ? '/api/ndvi' : '/api/lulc';
+      
+      // start = layerType === 'lulc' ? ('2021-01-01') : start;
+      // setStartDate(start);
       const response = await axios.get(`${endpoint}?startDate=${start}&endDate=${end}`);
-
-      console.log('Response:', response.data);
 
       if (response.data.success && response.data.mapUrl) {
         const url = response.data.mapUrl.urlFormat || response.data.mapUrl;
         setMapUrl(url);
-        console.log('Map URL set:', url);
       } else {
         throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Error fetching map data:', err);
-      setError(err.message || 'Failed to load map data');
+      if (err.response && err.response.status === 404) {
+        console.error('Error: No map data found for the specified parameters (404).');
+        setError('No data found for this period. Please try a different date range.');
+        setMapUrl(null);
+      } else {
+        console.error('An unexpected error occurred:', err.message);
+        setError('An unexpected error occurred. Please try again later.');
+      }
     } finally {
       setLoading(false);
       setIsUpdating(false);
     }
   };
 
-
   const handleLayerChange = (layerType) => {
     console.log('Layer changed to:', layerType);
     setSelectedLayer(layerType);
-    setMapUrl(''); // Clear existing map data
+    setMapUrl('');
     setError(null);
 
-    // Fetch new data for the selected layer
     if (layerType) {
       setLoading(true);
       fetchMapData(startDate, endDate, layerType);
     }
   };
 
-
-  // Handle date changes from the control panel
   const handleDateChange = ({ startDate: newStartDate, endDate: newEndDate }) => {
     setStartDate(newStartDate);
     setEndDate(newEndDate);
   };
 
-  // Handle map updates from the control panel
   const handleUpdateMap = (start, end) => {
     fetchMapData(start, end, selectedLayer);
+  };
+
+  const togglePanel = () => {
+    setIsPanelVisible(!isPanelVisible);
   };
 
   const renderMapLayers = ({ TileLayer, Marker, Popup }) => (
@@ -174,23 +179,69 @@ export default function Home() {
 
   return (
     <Layout>
-      <div style={{ display: 'flex', height: 'calc(100vh - 160px)' }}>
+      <div style={{ display: 'flex', height: 'calc(100vh - 160px)', position: 'relative' }}>
+        {/* Toggle Button */}
+        <button
+          onClick={togglePanel}
+          style={{
+            position: 'absolute',
+            top: '80px',
+            left: isPanelVisible ? '305px' : '10px',
+            zIndex: 1001,
+            background: 'rgba(255, 255, 255, 0.95)',
+            border: '1px solid #a6a8a9ff',
+            borderRadius: '6px',
+            padding: '10px 12px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            fontSize: '16px',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minWidth: '44px',
+            minHeight: '44px'
+          }}
+          title={isPanelVisible ? 'Hide Control Panel' : 'Show Control Panel'}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 255, 255, 1)';
+            e.target.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'rgba(255, 255, 255, 0.95)';
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          {isPanelVisible ? '◀' : '▶'}
+        </button>
+
         {/* Control Panel */}
-        <ControlPanel
-          startDate={startDate}
-          endDate={endDate}
-          selectedLayer={selectedLayer}
-          onLayerChange={handleLayerChange}
-          onDateChange={handleDateChange}
-          onUpdateMap={handleUpdateMap}
-          isUpdating={isUpdating}
-          error={error}
-        />
-
-
+        <div style={{
+          transform: `translateX(${isPanelVisible ? '0' : '-100%'})`,
+          transition: 'transform 0.3s ease',
+          width: '300px',
+          flexShrink: 0,
+          zIndex: 1000
+        }}>
+          <ControlPanel
+            startDate={startDate}
+            endDate={endDate}
+            selectedLayer={selectedLayer}
+            onLayerChange={handleLayerChange}
+            onDateChange={handleDateChange}
+            onUpdateMap={handleUpdateMap}
+            isUpdating={isUpdating}
+            error={error}
+          />
+        </div>
 
         {/* Map Container */}
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          marginLeft: isPanelVisible ? '0' : '-300px',
+          transition: 'margin-left 0.3s ease'
+        }}>
           <Map
             className={styles.homeMap}
             center={DEFAULT_CENTER}

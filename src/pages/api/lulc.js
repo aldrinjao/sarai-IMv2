@@ -65,21 +65,34 @@ const getDateBoundaries = (startDate, endDate) => {
   return { start, end };
 };
 
+// Utility function to evaluate Earth Engine objects asynchronously
+const evaluateEE = (eeObject) => {
+  return new Promise((resolve, reject) => {
+    eeObject.evaluate((result, error) => {
+      if (error) {
+        reject(new Error(`Earth Engine evaluation failed: ${error}`));
+      } else {
+        resolve(result);
+      }
+    });
+  });
+};
+
 export default async function handler(req, res) {
   try {
-    console.log('API endpoint called');
+    console.log('LULC API endpoint called');
 
     // Extract date parameters from query string
     const { startDate, endDate } = req.query;
 
-    // Set default dates if not provided
-    const defaultStartDate = '2017-01-01';
-    const defaultEndDate = '2017-12-31';
+    // Set default dates if not provided (using 2023 for more reliable data availability)
+    const defaultStartDate = '2023-01-01';
+    const defaultEndDate = '2023-12-31';
 
     const finalStartDate = startDate || defaultStartDate;
     const finalEndDate = endDate || defaultEndDate;
 
-    console.log(`Date range: ${finalStartDate} to ${finalEndDate}`);
+    console.log('Date range:', finalStartDate, 'to', finalEndDate);
 
     // Validate date formats
     if (!isValidDate(finalStartDate)) {
@@ -125,7 +138,6 @@ export default async function handler(req, res) {
       "#C6AD8D"  // Rangeland
     ];
 
-
     var roi = ee.FeatureCollection('WM/geoLab/geoBoundaries/600/ADM0')
       .filter(ee.Filter.eq('shapeName', 'Philippines'))
       .first()
@@ -134,10 +146,31 @@ export default async function handler(req, res) {
     console.log('Processing image collection...');
 
     // Process the image collection with dynamic date filtering
-    const image = lulc
+    var lulcCollection = lulc
       .filterDate(finalStartDate, finalEndDate)
-      .filterBounds(roi)
-      .mosaic()
+      .filterBounds(roi);
+
+    // Check collection size asynchronously
+    console.log('Checking collection size...');
+    const collectionSize = await evaluateEE(lulcCollection.size());
+    console.log(`LULC Collection Size: ${collectionSize}`);
+
+    // Check if collection is empty
+    if (collectionSize === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No LULC data found for the specified date range and region',
+        metadata: {
+          startDate: finalStartDate,
+          endDate: finalEndDate,
+          region: 'Philippines',
+          collectionSize: collectionSize
+        }
+      });
+    }
+
+    // Process the collection
+    lulcCollection = lulcCollection.mosaic()
       .remap([1, 2, 4, 5, 7, 8, 9, 10, 11], [1, 2, 3, 4, 5, 6, 7, 8, 9])
       .clip(roi);
 
@@ -150,10 +183,8 @@ export default async function handler(req, res) {
 
     console.log('Getting map URL...');
 
-    // Get the map URL
-    const mapUrl = image.getMap(visParams);
-
-    console.log('Sending response...');
+    // Extract the tile URL template from the map object
+    const mapUrl = lulcCollection.getMap(visParams);
 
     // Send response with additional metadata
     res.status(200).json({
@@ -164,6 +195,7 @@ export default async function handler(req, res) {
         endDate: finalEndDate,
         region: 'Philippines',
         dataset: 'ESRI Global Land Use Land Cover',
+        collectionSize: collectionSize,
         totalDays: Math.ceil((new Date(finalEndDate) - new Date(finalStartDate)) / (1000 * 60 * 60 * 24)),
         colors: {
           water: colors[0],
@@ -175,12 +207,23 @@ export default async function handler(req, res) {
           snowIce: colors[6],
           clouds: colors[7],
           rangeland: colors[8]
+        },
+        classMapping: {
+          1: 'Water',
+          2: 'Trees',
+          3: 'Flooded Vegetation',
+          4: 'Crops',
+          5: 'Built Area',
+          6: 'Bare Ground',
+          7: 'Snow/Ice',
+          8: 'Clouds',
+          9: 'Rangeland'
         }
       }
     });
 
   } catch (error) {
-    console.error('Error in handler:', error);
+    console.error('API Error:', error);
 
     // Send detailed error response
     res.status(500).json({
