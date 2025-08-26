@@ -1,98 +1,42 @@
 const ee = require('@google/earthengine');
 const privateKey = require('./ee_key.json');
+const {
+  isValidDate,
+  getDateBoundaries,
+  evaluateEE,
+  getGeometryInfo,
+  getAdminGeometry,
+  initializeEE
+} = require('./function');
 
 let isInitialized = false;
 
-const initializeEE = () => {
-  return new Promise((resolve, reject) => {
-    if (isInitialized) {
-      resolve();
-      return;
-    }
-
-    console.log('Authenticating with Earth Engine...');
-
-    // Authenticate using the private key
-    ee.data.authenticateViaPrivateKey(
-      privateKey,
-      () => {
-        console.log('Authentication succeeded!');
-        // Initialize Earth Engine after successful authentication
-        ee.initialize(
-          null,
-          null,
-          () => {
-            console.log('Earth Engine client library initialized.');
-            isInitialized = true;
-            resolve();
-          },
-          (err) => {
-            console.error('Failed to initialize Earth Engine:', err);
-            reject(err);
-          }
-        );
-      },
-      (err) => {
-        console.error('Authentication failed:', err);
-        reject(err);
-      }
-    );
-  });
-};
-
-// Utility function to validate date format
-const isValidDate = (dateString) => {
-  const date = new Date(dateString);
-  return date instanceof Date && !isNaN(date) && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
-};
-
-// Utility function to get date range boundaries
-const getDateBoundaries = (startDate, endDate) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  // Ensure end date is after start date
-  if (end <= start) {
-    throw new Error('End date must be after start date');
+// Wrapper for Earth Engine initialization to handle state
+const initEE = async () => {
+  if (isInitialized) {
+    return;
   }
-
-  // Check if date range is reasonable (not more than 10 years)
-  const diffYears = (end - start) / (1000 * 60 * 60 * 24 * 365);
-  if (diffYears > 10) {
-    throw new Error('Date range cannot exceed 10 years');
-  }
-
-  return { start, end };
+  
+  await initializeEE(privateKey);
+  isInitialized = true;
 };
 
-// Utility function to evaluate Earth Engine objects asynchronously
-const evaluateEE = (eeObject) => {
-  return new Promise((resolve, reject) => {
-    eeObject.evaluate((result, error) => {
-      if (error) {
-        reject(new Error(`Earth Engine evaluation failed: ${error}`));
-      } else {
-        resolve(result);
-      }
-    });
-  });
-};
-
-export default async function handler(req, res) {
+// Main handler function
+module.exports = async function handler(req, res) {
   try {
     console.log('LULC API endpoint called');
 
-    // Extract date parameters from query string
-    const { startDate, endDate } = req.query;
+    // Extract parameters from query string
+    const { startDate, endDate, region, province, municipality } = req.query;
 
-    // Set default dates if not provided (using 2023 for more reliable data availability)
+    console.log('Query parameters:', { startDate, endDate, region, province, municipality });
+
+    // Set default dates if not provided
     const defaultStartDate = '2023-01-01';
     const defaultEndDate = '2023-12-31';
 
     const finalStartDate = startDate || defaultStartDate;
     const finalEndDate = endDate || defaultEndDate;
-
-    console.log('Date range:', finalStartDate, 'to', finalEndDate);
 
     // Validate date formats
     if (!isValidDate(finalStartDate)) {
@@ -120,11 +64,9 @@ export default async function handler(req, res) {
     }
 
     // Initialize Earth Engine if not already done
-    await initializeEE();
+    await initEE();
 
     console.log('Creating Earth Engine objects...');
-
-    const lulc = ee.ImageCollection('projects/sat-io/open-datasets/landcover/ESRI_Global-LULC_10m_TS');
 
     const colors = [
       "#1A5BAB", // Water
@@ -138,19 +80,28 @@ export default async function handler(req, res) {
       "#C6AD8D"  // Rangeland
     ];
 
-    var roi = ee.FeatureCollection('WM/geoLab/geoBoundaries/600/ADM0')
-      .filter(ee.Filter.eq('shapeName', 'Philippines'))
-      .first()
-      .geometry();
+    // Get the region of interest geometry
+    console.log('Getting admin geometry...');
+    const roi = await getAdminGeometry(region, province, municipality);
+
+    if (!roi) {
+      return res.status(400).json({
+        success: false,
+        error: 'Could not create valid geometry for the specified region'
+      });
+    }
 
     console.log('Processing image collection...');
 
+    // Get the LULC dataset
+    const lulc = ee.ImageCollection('projects/sat-io/open-datasets/landcover/ESRI_Global-LULC_10m_TS');
+
     // Process the image collection with dynamic date filtering
-    var lulcCollection = lulc
+    let lulcCollection = lulc
       .filterDate(finalStartDate, finalEndDate)
       .filterBounds(roi);
 
-    // Check collection size asynchronously
+    // Check collection size
     console.log('Checking collection size...');
     const collectionSize = await evaluateEE(lulcCollection.size());
     console.log(`LULC Collection Size: ${collectionSize}`);
@@ -163,14 +114,17 @@ export default async function handler(req, res) {
         metadata: {
           startDate: finalStartDate,
           endDate: finalEndDate,
-          region: 'Philippines',
+          region: region || 'Philippines',
+          province: province,
+          municipality: municipality,
           collectionSize: collectionSize
         }
       });
     }
 
-    // Process the collection
-    lulcCollection = lulcCollection.mosaic()
+    // Create the final processed image
+    const lulcImage = lulcCollection
+      .mosaic()
       .remap([1, 2, 4, 5, 7, 8, 9, 10, 11], [1, 2, 3, 4, 5, 6, 7, 8, 9])
       .clip(roi);
 
@@ -183,17 +137,27 @@ export default async function handler(req, res) {
 
     console.log('Getting map URL...');
 
-    // Extract the tile URL template from the map object
-    const mapUrl = lulcCollection.getMap(visParams);
+    // Get the map tiles URL
+    const mapUrl = lulcImage.getMap(visParams);
 
-    // Send response with additional metadata
+    console.log('Calculating geometry info...');
+
+    // Get center, bounds, and zoom level for the region
+    const geometryInfo = await getGeometryInfo(roi);
+
+    // Send successful response
     res.status(200).json({
       success: true,
       mapUrl: mapUrl,
+      center: geometryInfo.center,
+      bounds: geometryInfo.bounds,
+      zoom: geometryInfo.zoom,
       metadata: {
         startDate: finalStartDate,
         endDate: finalEndDate,
-        region: 'Philippines',
+        region: region || 'Philippines',
+        province: province,
+        municipality: municipality,
         dataset: 'ESRI Global Land Use Land Cover',
         collectionSize: collectionSize,
         totalDays: Math.ceil((new Date(finalEndDate) - new Date(finalStartDate)) / (1000 * 60 * 60 * 24)),
@@ -232,8 +196,11 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString(),
       requestParams: {
         startDate: req.query.startDate,
-        endDate: req.query.endDate
+        endDate: req.query.endDate,
+        region: req.query.region,
+        province: req.query.province,
+        municipality: req.query.municipality
       }
     });
   }
-}
+};

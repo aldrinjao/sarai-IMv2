@@ -6,6 +6,7 @@ import { Marker, Popup, useMapEvents } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 
 import Leaflet from 'leaflet';
+import MapController from './MapController'; // Import the new controller
 import styles from './Map.module.scss';
 
 const { MapContainer } = ReactLeaflet;
@@ -17,13 +18,9 @@ function LocationMarker() {
       console.log(e.latlng);
     }
   })
-
-
 }
 
-
-const Map = ({ children, className, width, height, ...rest }) => {
-
+const Map = ({ children, className, center, zoom, ...rest }) => { // Accept center and zoom props
   let mapClassName = styles.map;
 
   if (className) {
@@ -31,9 +28,9 @@ const Map = ({ children, className, width, height, ...rest }) => {
   }
 
   return (
-    <MapContainer className={mapClassName} {...rest} >
+    <MapContainer className={mapClassName} center={center} zoom={zoom} {...rest} >
       <LocationMarker />
-
+      <MapController center={center} zoom={zoom} /> {/* Render the controller here */}
       {children(ReactLeaflet, Leaflet)}
     </MapContainer>
   )

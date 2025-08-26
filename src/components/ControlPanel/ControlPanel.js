@@ -1,15 +1,24 @@
-import { useState } from 'react';
 
-const ControlPanel = ({ 
-  startDate, 
-  endDate, 
-  onDateChange, 
-  onUpdateMap, 
+const ControlPanel = ({
+  startDate,
+  endDate,
+  onDateChange,
+  onUpdateMap,
   onLayerChange,
   isUpdating = false,
   error = null,
-  selectedLayer
+  regions,
+  selectedLayer,
+  selectedRegion,
+  selectedProvince,
+  selectedMunicipality,
+  onRegionChange,
+  onProvinceChange,
+  onMunicipalityChange,
+  provinces = [],
+  municipalities = []
 }) => {
+
 
   const handleBackToLayers = () => {
     onLayerChange(null);
@@ -25,41 +34,8 @@ const ControlPanel = ({
 
   const handleLayerChange = (layerType) => {
     onLayerChange(layerType);
-
   }
 
-  const handlePresetDateRange = (preset) => {
-    let start, end;
-    const currentYear = new Date().getFullYear();
-    
-    switch (preset) {
-      case '2020':
-        start = '2020-01-01';
-        end = '2020-12-31';
-        break;
-      case '2021':
-        start = '2021-01-01';
-        end = '2021-12-31';
-        break;
-      case '2022':
-        start = '2022-01-01';
-        end = '2022-12-31';
-        break;
-      case '2023':
-        start = '2023-01-01';
-        end = '2023-12-31';
-        break;
-      case 'last3years':
-        start = `${currentYear - 3}-01-01`;
-        end = `${currentYear - 1}-12-31`;
-        break;
-      default:
-        return;
-    }
-    
-    onDateChange({ startDate: start, endDate: end });
-    onUpdateMap(start, end);
-  };
 
   const layerOptions = [
     {
@@ -80,26 +56,6 @@ const ControlPanel = ({
     }
   ];
 
-  const getLegendItems = () => {
-    if (selectedLayer === 'ndvi') {
-      return [
-        { name: 'Very Low Vegetation', color: '#8B4513' },
-        { name: 'Low Vegetation', color: '#DAA520' },
-        { name: 'Moderate Vegetation', color: '#ADFF2F' },
-        { name: 'High Vegetation', color: '#228B22' },
-        { name: 'Very High Vegetation', color: '#006400' }
-      ];
-    } else if (selectedLayer === 'lulc') {
-      return [
-        { name: 'Water', color: '#1A5BAB' },
-        { name: 'Trees', color: '#358221' },
-        { name: 'Crops', color: '#FFDB5C' },
-        { name: 'Built Area', color: '#ED022A' }
-      ];
-    }
-    return [];
-  };
-
   const presetYears = ['2020', '2021', '2022', '2023'];
 
   // Layer Selection View
@@ -117,11 +73,11 @@ const ControlPanel = ({
         <div style={{ marginBottom: '30px' }}>
           <h3 style={{
             margin: '0 0 10px 0',
-            fontSize: '20px',
+            fontSize: '26px',
             fontWeight: '600',
             color: '#343a40'
           }}>
-            Earth Observation
+            SARAI Maps
           </h3>
           <p style={{
             margin: 0,
@@ -129,7 +85,7 @@ const ControlPanel = ({
             color: '#6c757d',
             lineHeight: '1.5'
           }}>
-            Select a layer to explore Earth's surface data and patterns over time.
+            Select a layer to explore.
           </p>
         </div>
 
@@ -143,7 +99,7 @@ const ControlPanel = ({
           }}>
             Choose Data Layer
           </h4>
-          
+
           <div style={{ display: 'grid', gap: '15px' }}>
             {layerOptions.map((layer) => (
               <button
@@ -246,7 +202,7 @@ const ControlPanel = ({
           color: '#6c757d',
           textAlign: 'center'
         }}>
-          Powered by satellite data & Earth observation
+          Powered by Google Earth Engine
         </div>
       </div>
     );
@@ -299,10 +255,10 @@ const ControlPanel = ({
           color: '#6c757d',
           lineHeight: '1.4'
         }}>
-          Select date ranges to explore {layerOptions.find(l => l.id === selectedLayer)?.fullName.toLowerCase()} over time.
+          Configure parameters for {layerOptions.find(l => l.id === selectedLayer)?.fullName.toLowerCase()} analysis.
         </p>
       </div>
-      
+
       {/* Error Display */}
       {error && (
         <div style={{
@@ -317,7 +273,132 @@ const ControlPanel = ({
           <strong>Error:</strong> {error}
         </div>
       )}
-      
+
+      {/* Location Selection */}
+      <div style={{ marginBottom: '25px' }}>
+        <h4 style={{
+          margin: '0 0 15px 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          color: '#6c757d',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          Location Selection
+        </h4>
+
+
+
+
+
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontSize: '13px',
+            fontWeight: '500',
+            color: '#495057'
+          }}>
+            Region
+          </label>
+          <select
+            value={selectedRegion || ''}
+            onChange={(e) => onRegionChange(e.target.value)}
+            disabled={isUpdating}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #ced4da',
+              borderRadius: '4px',
+              fontSize: '14px',
+              backgroundColor: isUpdating ? '#e9ecef' : 'white',
+              cursor: isUpdating ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <option value="">All</option>
+
+            {regions.map((region) => (
+              <option key={region.ADM1_PCODE} value={region.ADM1_PCODE}>
+                {region.ADM1_EN}
+              </option>
+            ))}
+
+
+          </select>
+        </div>
+
+
+
+        {selectedRegion && <div style={{ marginBottom: '15px' }}>
+          <label style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontSize: '13px',
+            fontWeight: '500',
+            color: '#495057'
+          }}>
+            Province
+          </label>
+          <select
+            value={selectedProvince || ''}
+            onChange={(e) => onProvinceChange(e.target.value)}
+            disabled={isUpdating}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #ced4da',
+              borderRadius: '4px',
+              fontSize: '14px',
+              backgroundColor: isUpdating ? '#e9ecef' : 'white',
+              cursor: isUpdating ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <option value="">All</option>
+            {provinces.map((province) => (
+              <option key={province.ADM2_PCODE} value={province.ADM2_PCODE}>
+                {province.ADM2_EN}
+              </option>
+            ))}
+          </select>
+        </div>
+        }
+
+        {selectedProvince && (
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '5px',
+              fontSize: '13px',
+              fontWeight: '500',
+              color: '#495057'
+            }}>
+              Municipality
+            </label>
+            <select
+              value={selectedMunicipality || ''}
+              onChange={(e) => onMunicipalityChange(e.target.value)}
+              disabled={isUpdating}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #ced4da',
+                borderRadius: '4px',
+                fontSize: '14px',
+                backgroundColor: isUpdating ? '#e9ecef' : 'white',
+                cursor: isUpdating ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <option value="">Entire Province</option>
+              {municipalities.map((municipality) => (
+                <option key={municipality.ADM3_PCODE} value={municipality.ADM3_PCODE}>
+                  {municipality.ADM3_EN}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       {/* Date Range Section */}
       <div style={{ marginBottom: '25px' }}>
         <h4 style={{
@@ -328,9 +409,9 @@ const ControlPanel = ({
           textTransform: 'uppercase',
           letterSpacing: '0.5px'
         }}>
-          Custom Date Range
+          Date Range
         </h4>
-        
+
         <div style={{ marginBottom: '15px' }}>
           <label style={{
             display: 'block',
@@ -357,7 +438,7 @@ const ControlPanel = ({
             }}
           />
         </div>
-        
+
         <div style={{ marginBottom: '15px' }}>
           <label style={{
             display: 'block',
@@ -384,7 +465,7 @@ const ControlPanel = ({
             }}
           />
         </div>
-        
+
         <button
           onClick={() => onUpdateMap(startDate, endDate)}
           disabled={isUpdating || !startDate || !endDate}
@@ -401,88 +482,10 @@ const ControlPanel = ({
             transition: 'background-color 0.2s'
           }}
         >
-          {isUpdating ? 'Updating...' : 'Apply Date Range'}
+          {isUpdating ? 'Updating...' : 'Apply Changes'}
         </button>
       </div>
-      
-      {/* Preset Date Ranges */}
-      <div style={{ marginBottom: '25px', display:'none' }}>
-        <h4 style={{
-          margin: '0 0 15px 0',
-          fontSize: '14px',
-          fontWeight: '500',
-          color: '#6c757d',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px'
-        }}>
-          Quick Select
-        </h4>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-          {presetYears.map((year) => (
-            <button
-              key={year}
-              onClick={() => handlePresetDateRange(year)}
-              disabled={isUpdating}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: 'white',
-                border: '1px solid #dee2e6',
-                borderRadius: '4px',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: isUpdating ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                if (!isUpdating) {
-                  e.target.style.backgroundColor = '#f8f9fa';
-                  e.target.style.borderColor = '#adb5bd';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isUpdating) {
-                  e.target.style.backgroundColor = 'white';
-                  e.target.style.borderColor = '#dee2e6';
-                }
-              }}
-            >
-              {year}
-            </button>
-          ))}
-        </div>
-        
-        <button
-          onClick={() => handlePresetDateRange('last3years')}
-          disabled={isUpdating}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            backgroundColor: '#e9ecef',
-            border: '1px solid #ced4da',
-            borderRadius: '4px',
-            fontSize: '13px',
-            fontWeight: '500',
-            cursor: isUpdating ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            if (!isUpdating) {
-              e.target.style.backgroundColor = '#dee2e6';
-              e.target.style.borderColor = '#adb5bd';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isUpdating) {
-              e.target.style.backgroundColor = '#e9ecef';
-              e.target.style.borderColor = '#ced4da';
-            }
-          }}
-        >
-          Last 3 Years
-        </button>
-      </div>
-      
+
       {/* Current Selection Display */}
       {startDate && endDate && (
         <div style={{
@@ -496,54 +499,18 @@ const ControlPanel = ({
           <div style={{ marginBottom: '5px', fontWeight: '500', color: '#004085' }}>
             Current Selection:
           </div>
-          <div style={{ color: '#0056b3' }}>
-            {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
+          <div style={{ color: '#0056b3', marginBottom: '5px' }}>
+            <strong>Region:</strong> {selectedMunicipality ? municipalities.find(m => m.id === selectedMunicipality)?.name : selectedProvince ? provinces.find(p => p.id === selectedProvince)?.name : 'Philippines'}
           </div>
-          <div style={{ marginTop: '5px', fontSize: '12px', color: '#6c757d' }}>
+          <div style={{ color: '#0056b3', marginBottom: '5px' }}>
+            <strong>Period:</strong> {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
+          </div>
+          <div style={{ fontSize: '12px', color: '#6c757d' }}>
             Duration: {Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days
           </div>
         </div>
       )}
-      
-      {/* Legend */}
-      <div>
-        <h4 style={{
-          margin: '0 0 15px 0',
-          fontSize: '14px',
-          fontWeight: '500',
-          color: '#6c757d',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px'
-        }}>
-          {selectedLayer === 'ndvi' ? 'Vegetation Index Legend' : 'Land Cover Legend'}
-        </h4>
-        
-        <div style={{ display: 'grid', gap: '8px' }}>
-          {getLegendItems().map((item) => (
-            <div key={item.name} style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '6px 8px',
-              backgroundColor: 'white',
-              borderRadius: '4px',
-              fontSize: '12px',
-              border: '1px solid #e9ecef'
-            }}>
-              <div style={{
-                width: '16px',
-                height: '16px',
-                backgroundColor: item.color,
-                marginRight: '10px',
-                borderRadius: '2px',
-                border: '1px solid rgba(0,0,0,0.1)',
-                flexShrink: 0
-              }}></div>
-              <span style={{ fontWeight: '500' }}>{item.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      
+
       {/* Footer */}
       <div style={{
         marginTop: '30px',
@@ -553,7 +520,7 @@ const ControlPanel = ({
         color: '#6c757d',
         textAlign: 'center'
       }}>
-        {selectedLayer === 'ndvi' ? 'NDVI data from satellite imagery' : 'Data from ESRI Global Land Use Land Cover'}
+        {selectedLayer === 'ndvi' ? 'MODIS NDVI satellite data' : 'ESRI Global Land Use Land Cover data'}
       </div>
     </div>
   );
