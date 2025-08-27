@@ -4,6 +4,8 @@ import ControlPanel from '@components/ControlPanel';
 import Layout from '@components/Layout';
 import LegendPanel from '@components/LegendPanel';
 import Map from '@components/Map';
+import NDVIGraphPanel from '@components/NDVIGraphPanel';
+import TimeDimensionController from '@components/TimeDimensionController';
 import axios from 'axios';
 import municipalitiesData from './locdata/table_municipality.json';
 import provincesData from './locdata/table_province.json';
@@ -17,16 +19,139 @@ const MAX_BOUNDS = [
   [2.9349970669152285, 105.38085937500001],
 ];
 
+// Simple inline TimeDimensionController for testing
+const SimpleTimeController = ({
+  timeSeriesMaps = [],
+  selectedLayer,
+  selectedDate,
+  onDateChange
+}) => {
+
+  if (selectedLayer !== 'ndvi') {
+    return null;
+  }
+
+  const sortedMaps = timeSeriesMaps ?
+    [...timeSeriesMaps].sort((a, b) => new Date(a.date) - new Date(b.date)) : [];
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 1001,
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      border: '1px solid #dee2e6',
+      borderRadius: '12px',
+      padding: '16px 20px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+      minWidth: '300px'
+    }}>
+      <div style={{
+        fontSize: '14px',
+        fontWeight: '600',
+        color: '#343a40',
+        marginBottom: '8px',
+        textAlign: 'center'
+      }}>
+        🕐 NDVI Time Series Controller
+      </div>
+
+      <div style={{
+        fontSize: '12px',
+        color: '#6c757d',
+        textAlign: 'center',
+        marginBottom: '12px'
+      }}>
+        {sortedMaps.length > 0 ? (
+          <>
+            <div>{sortedMaps.length} time steps available</div>
+            <div>Selected: {selectedDate || 'None'}</div>
+            <div>Range: {sortedMaps[0].date} to {sortedMaps[sortedMaps.length - 1].date}</div>
+          </>
+        ) : (
+          <div>⏳ Loading time series data...</div>
+        )}
+      </div>
+
+      {sortedMaps.length > 0 && (
+        <div style={{ textAlign: 'center' }}>
+          <button
+            style={{
+              background: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginRight: '8px'
+            }}
+            onClick={() => {
+              if (onDateChange && sortedMaps[0]) {
+                onDateChange(sortedMaps[0].date);
+              }
+            }}
+          >
+            ⏮ First
+          </button>
+
+          <button
+            style={{
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginRight: '8px'
+            }}
+            onClick={() => {
+              if (onDateChange && sortedMaps[Math.floor(sortedMaps.length / 2)]) {
+                onDateChange(sortedMaps[Math.floor(sortedMaps.length / 2)].date);
+              }
+            }}
+          >
+            ⏯ Middle
+          </button>
+
+          <button
+            style={{
+              background: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+            onClick={() => {
+              if (onDateChange && sortedMaps[sortedMaps.length - 1]) {
+                onDateChange(sortedMaps[sortedMaps.length - 1].date);
+              }
+            }}
+          >
+            ⏭ Last
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Home() {
   const [mapUrl, setMapUrl] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [bounds, setBounds] = useState(null);
   const [mapInstance, setMapInstance] = useState(null);
 
-  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  // Date range for analysis
+  const [startDate, setStartDate] = useState(new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [isUpdating, setIsUpdating] = useState(false);
@@ -38,6 +163,22 @@ export default function Home() {
   // Legend panel visibility
   const [isLegendVisible, setIsLegendVisible] = useState(false);
 
+  // NDVI Graph panel visibility
+  const [isGraphVisible, setIsGraphVisible] = useState(false);
+
+  // Time dimension controller visibility
+  const [isTimeControllerVisible, setIsTimeControllerVisible] = useState(false);
+
+  // Time series data
+  const [timeSeriesData, setTimeSeriesData] = useState([]);
+  const [timeSeriesMaps, setTimeSeriesMaps] = useState([]);
+  const [calendarDayAverages, setCalendarDayAverages] = useState([]);
+  const [timeSeriesMetadata, setTimeSeriesMetadata] = useState(null);
+
+  // Current selected date for time series
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [currentTimeSeriesUrl, setCurrentTimeSeriesUrl] = useState('');
+
   // Location selection state
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [selectedProvince, setSelectedProvince] = useState(null);
@@ -45,6 +186,14 @@ export default function Home() {
   const [regions] = useState(regionsData);
   const [provinces, setProvinces] = useState([]);
   const [municipalities, setMunicipalities] = useState([]);
+
+  // Animation state
+  const [isAnimationPlaying, setIsAnimationPlaying] = useState(false);
+
+
+
+  const [showModal, setShowModal] = useState(true);
+
 
   useEffect(() => {
     if (selectedRegion) {
@@ -71,16 +220,38 @@ export default function Home() {
     setSelectedMunicipality(null);
   }, [selectedProvince]);
 
-  // Show legend when layer is selected
+  // Show panels when NDVI layer is selected
   useEffect(() => {
-    if (selectedLayer) {
+    if (selectedLayer === 'ndvi') {
       setIsLegendVisible(true);
+      setIsGraphVisible(true);
+      setIsTimeControllerVisible(true);
+      setShowModal(false);
+
+    } else if (selectedLayer === 'lulc') {
+      setIsLegendVisible(true);
+      setIsGraphVisible(false);
+      setIsTimeControllerVisible(false);
+      // Reset time series data for non-NDVI layers
+      setTimeSeriesData([]);
+      setTimeSeriesMaps([]);
+      setCalendarDayAverages([]);
+      setSelectedDate(null);
+      setShowModal(false);
+    } else {
+      setIsLegendVisible(false);
+      setIsGraphVisible(false);
+      setIsTimeControllerVisible(false);
+      setTimeSeriesData([]);
+      setTimeSeriesMaps([]);
+      setCalendarDayAverages([]);
+      setSelectedDate(null);
     }
-  }, [selectedLayer]);
+
+  }, [selectedLayer, timeSeriesMaps.length, calendarDayAverages.length]);
 
   // Function to update map view when bounds/center/zoom changes
   useEffect(() => {
-
     if (mapInstance && bounds) {
       try {
         // Use fitBounds if bounds are available for more precise fitting
@@ -102,6 +273,18 @@ export default function Home() {
       mapInstance.setView([center[0], center[1]], zoom);
     }
   }, [mapInstance, bounds, center, zoom]);
+
+  // Update map URL when time series date changes
+  useEffect(() => {
+    if (selectedDate && timeSeriesMaps.length > 0) {
+      const selectedMap = timeSeriesMaps.find(map => map.date === selectedDate);
+      if (selectedMap) {
+        setCurrentTimeSeriesUrl(selectedMap.url);
+      }
+    } else {
+      setCurrentTimeSeriesUrl('');
+    }
+  }, [selectedDate, timeSeriesMaps]);
 
   const fetchMapData = async (start = startDate, end = endDate, layerType = selectedLayer) => {
     if (!layerType) {
@@ -127,6 +310,11 @@ export default function Home() {
       }
       if (selectedMunicipality) {
         queryParams += `&municipality=${selectedMunicipality}`;
+      }
+
+      // Enable time series for NDVI
+      if (layerType === 'ndvi') {
+        queryParams += '&includeTimeSeries=true';
       }
 
       console.log(`Fetching data from ${endpoint} with params:`, queryParams);
@@ -162,8 +350,24 @@ export default function Home() {
           console.log('Setting new bounds:', response.data.bounds);
         }
 
-        if (response.data.data) {
-          console.log('Received time series data:', response.data.data);
+        // Handle time series data for NDVI
+        if (layerType === 'ndvi' && response.data.timeSeries) {
+          setTimeSeriesData(response.data.timeSeries.data || []);
+          setTimeSeriesMaps(response.data.timeSeries.maps || []);
+          setCalendarDayAverages(response.data.timeSeries.calendarDayAverages || []);
+          setTimeSeriesMetadata(response.data.timeSeries);
+
+          console.log('Time series data:', {
+            dataPoints: response.data.timeSeries.data?.length,
+            maps: response.data.timeSeries.maps?.length,
+            calendarAverages: response.data.timeSeries.calendarDayAverages?.length
+          });
+
+          // Set initial selected date to the most recent available
+          if (response.data.timeSeries.maps && response.data.timeSeries.maps.length > 0) {
+            const sortedMaps = [...response.data.timeSeries.maps].sort((a, b) => new Date(b.date) - new Date(a.date));
+            setSelectedDate(sortedMaps[0].date);
+          }
         }
 
         setError(null);
@@ -188,40 +392,35 @@ export default function Home() {
   const handleLayerChange = (layerType) => {
     setSelectedLayer(layerType);
     setMapUrl('');
+    setCurrentTimeSeriesUrl('');
     setError(null);
 
-    if (layerType) {
-      setLoading(true);
-      fetchMapData(startDate, endDate, layerType);
-    } else {
-      setIsLegendVisible(false);
-      // Reset to default view when no layer is selected
-      setCenter(DEFAULT_CENTER);
-      setZoom(DEFAULT_ZOOM);
-      setBounds(null);
-    }
+    setIsLegendVisible(false);
+    setIsGraphVisible(false);
+    setIsTimeControllerVisible(false);
+    // Reset to default view when no layer is selected
+    setCenter(DEFAULT_CENTER);
+    setZoom(DEFAULT_ZOOM);
+    setBounds(null);
+    setTimeSeriesData([]);
+    setTimeSeriesMaps([]);
+    setCalendarDayAverages([]);
+    setSelectedDate(null);
   };
 
   const handleRegionChange = (regionId) => {
     setSelectedRegion(regionId || null);
     setSelectedProvince(null);
     setSelectedMunicipality(null);
-
-
   };
 
   const handleProvinceChange = (provinceId) => {
     setSelectedProvince(provinceId || null);
     setSelectedMunicipality(null);
-
-
   };
 
   const handleMunicipalityChange = (municipalityId) => {
     setSelectedMunicipality(municipalityId || null);
-
-    // If a layer is selected, refetch data with new municipality
-
   };
 
   const handleDateChange = ({ startDate: newStartDate, endDate: newEndDate }) => {
@@ -241,29 +440,56 @@ export default function Home() {
     setIsLegendVisible(!isLegendVisible);
   };
 
+  const toggleGraph = () => {
+    setIsGraphVisible(!isGraphVisible);
+  };
+
+  const toggleTimeController = () => {
+    setIsTimeControllerVisible(!isTimeControllerVisible);
+  };
+
+  const handleTimeSeriesDateChange = (date) => {
+    setSelectedDate(date);
+  };
+
+  const handleAnimationPlayStateChange = (isPlaying) => {
+    setIsAnimationPlaying(isPlaying);
+  };
+
   const renderMapLayers = ({ TileLayer, Marker, Popup, map }) => {
     // Store map instance for programmatic control
     if (map && !mapInstance) {
       setMapInstance(map);
     }
 
+    // Determine which URL to use for the tile layer
+    const activeTileUrl = currentTimeSeriesUrl || mapUrl;
+
     return (
       <>
+        {/* Base Map Layer */}
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; <a href=&quot;http://osm.org/copyright&quot;>OpenStreetMap</a> contributors"
         />
-        {mapUrl && (
+
+        {/* Data Layer */}
+        {activeTileUrl && (
           <TileLayer
-            url={mapUrl}
+            key={selectedDate || 'static'} // Force re-render when date changes
+            url={activeTileUrl}
             attribution="Google Earth Engine"
+            opacity={0.8}
           />
         )}
+
+        {/* Loading Indicator */}
         {(loading || isUpdating) && (
           <div style={{
             position: 'absolute',
             top: '20px',
-            right: '20px',
+            left: '50%', // Set the left edge to the horizontal center of the parent
+            transform: 'translateX(-50%)', // Shift the element back by half its own width
             background: 'rgba(255, 255, 255, 0.95)',
             padding: '12px 16px',
             borderRadius: '6px',
@@ -284,7 +510,10 @@ export default function Home() {
               borderRadius: '50%',
               animation: 'spin 1s linear infinite'
             }}></div>
-            {loading ? 'Loading Earth Engine data...' : 'Updating map...'}
+
+            {loading ?
+              (selectedLayer === 'ndvi' ? 'Loading NDVI time series...' : 'Loading Earth Engine data...') :
+              'Updating map...'}
             <style jsx>{`
               @keyframes spin {
                 0% { transform: rotate(0deg); }
@@ -294,7 +523,8 @@ export default function Home() {
           </div>
         )}
 
-        {!selectedLayer && !loading && (
+
+        {!selectedLayer && !loading && showModal && (
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -308,6 +538,25 @@ export default function Home() {
             textAlign: 'center',
             maxWidth: '300px'
           }}>
+            {/* Close Button */}
+            <button
+              onClick={() => { setShowModal(false); }}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#6c757d',
+                lineHeight: '1',
+                padding: '0'
+              }}
+            >
+              &times;
+            </button>
+            {/* End of Close Button */}
             <div style={{
               fontSize: '48px',
               marginBottom: '16px'
@@ -326,9 +575,94 @@ export default function Home() {
               color: '#6c757d',
               lineHeight: '1.4'
             }}>
-              Choose NDVI or LULC from the control panel to begin exploring satellite data.
+              Choose an overlay to start exploring satellite data.
             </p>
           </div>
+        )}
+
+        {/* Debug Info Panel (remove in production) */}
+        {selectedLayer === 'ndvi' && (
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            right: '20px',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '12px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            zIndex: 999,
+            maxWidth: '200px'
+          }}>
+            <div><strong>Debug Info:</strong></div>
+            <div>Layer: {selectedLayer}</div>
+            <div>Time series maps: {timeSeriesMaps.length}</div>
+            <div>Calendar averages: {calendarDayAverages.length}</div>
+            <div>Time controller visible: {isTimeControllerVisible ? 'Yes' : 'No'}</div>
+            <div>Selected date: {selectedDate || 'None'}</div>
+            <div>Loading: {loading ? 'Yes' : 'No'}</div>
+            <div>Updating: {isUpdating ? 'Yes' : 'No'}</div>
+          </div>
+        )}
+
+        {/* Simple Time Series Controller (for testing) */}
+        {/* <SimpleTimeController
+          timeSeriesMaps={timeSeriesMaps}
+          selectedLayer={selectedLayer}
+          selectedDate={selectedDate}
+          onDateChange={handleTimeSeriesDateChange}
+        /> */}
+
+        {/* Original Time Series Controller - Hidden for now */}
+        {false && selectedLayer === 'ndvi' && (
+          <TimeDimensionController
+            timeSeriesMaps={timeSeriesMaps}
+            isVisible={isTimeControllerVisible && timeSeriesMaps.length > 0}
+            onToggle={toggleTimeController}
+            onDateChange={handleTimeSeriesDateChange}
+            selectedDate={selectedDate}
+            isPlaying={isAnimationPlaying}
+            onPlayStateChange={handleAnimationPlayStateChange}
+          />
+        )}
+
+        {/* Show Time Controller Toggle Button when NDVI is selected but controller is hidden */}
+        {selectedLayer === 'ndvi' && timeSeriesMaps.length > 0 && !isTimeControllerVisible && (
+          <button
+            onClick={toggleTimeController}
+            style={{
+              position: 'absolute',
+              bottom: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1001,
+              background: 'rgba(255, 255, 255, 0.95)',
+              border: '1px solid #dee2e6',
+              borderRadius: '6px',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              fontSize: '14px',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: '500',
+              color: '#495057'
+            }}
+            title="Show Time Controls"
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 1)';
+              e.target.style.transform = 'translateX(-50%) scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.95)';
+              e.target.style.transform = 'translateX(-50%) scale(1)';
+            }}
+          >
+            <span>⏯️</span>
+            Time Controls ({timeSeriesMaps.length} maps)
+          </button>
         )}
 
         {/* Legend Panel */}
@@ -337,13 +671,24 @@ export default function Home() {
           isVisible={isLegendVisible}
           onToggle={toggleLegend}
         />
+
+        {/* NDVI Graph Panel */}
+        {selectedLayer === 'ndvi' && (
+          <NDVIGraphPanel
+            calendarDayAverages={calendarDayAverages}
+            isVisible={isGraphVisible}
+            onToggle={toggleGraph}
+            selectedDate={selectedDate}
+            metadata={timeSeriesMetadata}
+          />
+        )}
       </>
     );
   };
 
   return (
     <Layout>
-      <div style={{ display: 'flex', height: 'calc(100vh - 160px)', position: 'relative' }}>
+      <div style={{ display: 'flex', height: 'calc(100vh - 80px)', position: 'relative' }}>
         {/* Toggle Button */}
         <button
           onClick={togglePanel}
@@ -419,7 +764,7 @@ export default function Home() {
             className={styles.homeMap}
             center={center}
             zoom={zoom}
-            minZoom={5} // Reduced minimum zoom to allow for larger areas
+            minZoom={5}
             maxBounds={MAX_BOUNDS}
             style={{ height: '100%', width: '100%' }}
           >

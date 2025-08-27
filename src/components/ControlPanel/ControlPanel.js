@@ -1,4 +1,3 @@
-
 const ControlPanel = ({
   startDate,
   endDate,
@@ -19,7 +18,6 @@ const ControlPanel = ({
   municipalities = []
 }) => {
 
-
   const handleBackToLayers = () => {
     onLayerChange(null);
   };
@@ -36,15 +34,15 @@ const ControlPanel = ({
     onLayerChange(layerType);
   }
 
-
   const layerOptions = [
     {
       id: 'ndvi',
       name: 'NDVI',
       fullName: 'Normalized Difference Vegetation Index',
-      description: 'Measure of vegetation health and density using satellite imagery',
+      description: 'Measure of vegetation health and density with time series analysis',
       color: '#22c55e',
-      icon: '🌱'
+      icon: '🌱',
+      features: ['Time Series', 'Calendar Patterns', 'Animation']
     },
     {
       id: 'lulc',
@@ -52,7 +50,17 @@ const ControlPanel = ({
       fullName: 'Land Use Land Cover',
       description: 'Classification of land surface into different cover types',
       color: '#3b82f6',
-      icon: '🗺️'
+      icon: '🗺️',
+      features: ['Land Classification', 'Cover Types', 'Static Analysis']
+    },
+    {
+      id: 'flood',
+      name: 'Flood',
+      fullName: 'Flood Mapping',
+      description: 'Mapping of possible flooding event ',
+      color: '#3b82f6',
+      icon: '🗺️',
+      features: ['Land Classification', 'Cover Types', 'Static Analysis']
     }
   ];
 
@@ -85,7 +93,7 @@ const ControlPanel = ({
             color: '#6c757d',
             lineHeight: '1.5'
           }}>
-            Select a layer to explore.
+            Select a layer to explore satellite imagery and analysis tools.
           </p>
         </div>
 
@@ -100,7 +108,7 @@ const ControlPanel = ({
             Choose Data Layer
           </h4>
 
-          <div style={{ display: 'grid', gap: '15px' }}>
+          <div style={{ display: 'grid', gap: '10px' }}>
             {layerOptions.map((layer) => (
               <button
                 key={layer.id}
@@ -154,13 +162,37 @@ const ControlPanel = ({
                   </div>
                 </div>
                 <p style={{
-                  margin: 0,
+                  margin: '0 0 8px 0',
                   fontSize: '13px',
                   color: '#6c757d',
                   lineHeight: '1.4'
                 }}>
                   {layer.description}
                 </p>
+                
+                {/* Features List */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '4px',
+                  marginTop: '4px'
+                }}>
+                  {layer.features.map((feature, index) => (
+                    <span
+                      key={index}
+                      style={{
+                        fontSize: '10px',
+                        background: `${layer.color}20`,
+                        color: layer.color,
+                        padding: '2px 6px',
+                        borderRadius: '8px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
               </button>
             ))}
           </div>
@@ -189,7 +221,7 @@ const ControlPanel = ({
             color: '#0056b3',
             lineHeight: '1.4'
           }}>
-            Select a data layer above to begin exploring satellite imagery and analysis tools for your area of interest.
+            Select a data layer above to begin exploring satellite imagery. NDVI includes time series analysis and animation features for temporal vegetation monitoring.
           </p>
         </div>
 
@@ -257,6 +289,36 @@ const ControlPanel = ({
         }}>
           Configure parameters for {layerOptions.find(l => l.id === selectedLayer)?.fullName.toLowerCase()} analysis.
         </p>
+        
+        {/* Layer-specific info */}
+        {selectedLayer === 'ndvi' && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            backgroundColor: '#d4edda',
+            borderRadius: '8px',
+            fontSize: '12px',
+            border: '1px solid #c3e6cb'
+          }}>
+            <div style={{
+              fontWeight: '600',
+              color: '#155724',
+              marginBottom: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>🕒</span> Time Series Enabled
+            </div>
+            <p style={{
+              margin: 0,
+              color: '#155724',
+              lineHeight: '1.3'
+            }}>
+              This layer includes temporal analysis, calendar patterns, and animation controls for vegetation monitoring over time.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Error Display */}
@@ -287,10 +349,6 @@ const ControlPanel = ({
           Location Selection
         </h4>
 
-
-
-
-
         <div style={{ marginBottom: '15px' }}>
           <label style={{
             display: 'block',
@@ -316,52 +374,48 @@ const ControlPanel = ({
             }}
           >
             <option value="">All</option>
-
             {regions.map((region) => (
               <option key={region.ADM1_PCODE} value={region.ADM1_PCODE}>
                 {region.ADM1_EN}
               </option>
             ))}
-
-
           </select>
         </div>
 
-
-
-        {selectedRegion && <div style={{ marginBottom: '15px' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '5px',
-            fontSize: '13px',
-            fontWeight: '500',
-            color: '#495057'
-          }}>
-            Province
-          </label>
-          <select
-            value={selectedProvince || ''}
-            onChange={(e) => onProvinceChange(e.target.value)}
-            disabled={isUpdating}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ced4da',
-              borderRadius: '4px',
-              fontSize: '14px',
-              backgroundColor: isUpdating ? '#e9ecef' : 'white',
-              cursor: isUpdating ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <option value="">All</option>
-            {provinces.map((province) => (
-              <option key={province.ADM2_PCODE} value={province.ADM2_PCODE}>
-                {province.ADM2_EN}
-              </option>
-            ))}
-          </select>
-        </div>
-        }
+        {selectedRegion && (
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '5px',
+              fontSize: '13px',
+              fontWeight: '500',
+              color: '#495057'
+            }}>
+              Province
+            </label>
+            <select
+              value={selectedProvince || ''}
+              onChange={(e) => onProvinceChange(e.target.value)}
+              disabled={isUpdating}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #ced4da',
+                borderRadius: '4px',
+                fontSize: '14px',
+                backgroundColor: isUpdating ? '#e9ecef' : 'white',
+                cursor: isUpdating ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <option value="">All</option>
+              {provinces.map((province) => (
+                <option key={province.ADM2_PCODE} value={province.ADM2_PCODE}>
+                  {province.ADM2_EN}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {selectedProvince && (
           <div style={{ marginBottom: '15px' }}>
@@ -410,7 +464,47 @@ const ControlPanel = ({
           letterSpacing: '0.5px'
         }}>
           Date Range
+          {selectedLayer === 'ndvi' && (
+            <span style={{
+              marginLeft: '8px',
+              fontSize: '10px',
+              background: '#22c55e20',
+              color: '#22c55e',
+              padding: '2px 6px',
+              borderRadius: '8px',
+              fontWeight: '500',
+              textTransform: 'none'
+            }}>
+              Time Series
+            </span>
+          )}
         </h4>
+
+        {selectedLayer === 'ndvi' && (
+          <div style={{
+            marginBottom: '15px',
+            padding: '12px',
+            backgroundColor: '#fff3cd',
+            borderRadius: '8px',
+            fontSize: '12px',
+            border: '1px solid #ffeaa7'
+          }}>
+            <div style={{
+              fontWeight: '600',
+              color: '#856404',
+              marginBottom: '4px'
+            }}>
+              💡 Tip for Time Series Analysis
+            </div>
+            <p style={{
+              margin: 0,
+              color: '#856404',
+              lineHeight: '1.3'
+            }}>
+              Use a date range of 1-2 years for optimal time series visualization and calendar pattern analysis.
+            </p>
+          </div>
+        )}
 
         <div style={{ marginBottom: '15px' }}>
           <label style={{
@@ -500,13 +594,18 @@ const ControlPanel = ({
             Current Selection:
           </div>
           <div style={{ color: '#0056b3', marginBottom: '5px' }}>
-            <strong>Region:</strong> {selectedMunicipality ? municipalities.find(m => m.id === selectedMunicipality)?.name : selectedProvince ? provinces.find(p => p.id === selectedProvince)?.name : 'Philippines'}
+            <strong>Region:</strong> {selectedMunicipality ? municipalities.find(m => m.ADM3_PCODE === selectedMunicipality)?.ADM3_EN : selectedProvince ? provinces.find(p => p.ADM2_PCODE === selectedProvince)?.ADM2_EN : selectedRegion ? regions.find(r => r.ADM1_PCODE === selectedRegion)?.ADM1_EN : 'Philippines'}
           </div>
           <div style={{ color: '#0056b3', marginBottom: '5px' }}>
             <strong>Period:</strong> {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
           </div>
           <div style={{ fontSize: '12px', color: '#6c757d' }}>
             Duration: {Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days
+            {selectedLayer === 'ndvi' && (
+              <span style={{ display: 'block', marginTop: '4px', color: '#22c55e', fontWeight: '500' }}>
+                📊 Time series analysis enabled
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -520,7 +619,7 @@ const ControlPanel = ({
         color: '#6c757d',
         textAlign: 'center'
       }}>
-        {selectedLayer === 'ndvi' ? 'MODIS NDVI satellite data' : 'ESRI Global Land Use Land Cover data'}
+        {selectedLayer === 'ndvi' ? 'MODIS NDVI satellite data with time series' : 'ESRI Global Land Use Land Cover data'}
       </div>
     </div>
   );
