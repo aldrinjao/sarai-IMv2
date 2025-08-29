@@ -19,128 +19,6 @@ const MAX_BOUNDS = [
   [2.9349970669152285, 105.38085937500001],
 ];
 
-// Simple inline TimeDimensionController for testing
-const SimpleTimeController = ({
-  timeSeriesMaps = [],
-  selectedLayer,
-  selectedDate,
-  onDateChange
-}) => {
-
-  if (selectedLayer !== 'ndvi') {
-    return null;
-  }
-
-  const sortedMaps = timeSeriesMaps ?
-    [...timeSeriesMaps].sort((a, b) => new Date(a.date) - new Date(b.date)) : [];
-
-  return (
-    <div style={{
-      position: 'absolute',
-      bottom: '20px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      zIndex: 1001,
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      border: '1px solid #dee2e6',
-      borderRadius: '12px',
-      padding: '16px 20px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-      minWidth: '300px'
-    }}>
-      <div style={{
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#343a40',
-        marginBottom: '8px',
-        textAlign: 'center'
-      }}>
-        🕐 NDVI Time Series Controller
-      </div>
-
-      <div style={{
-        fontSize: '12px',
-        color: '#6c757d',
-        textAlign: 'center',
-        marginBottom: '12px'
-      }}>
-        {sortedMaps.length > 0 ? (
-          <>
-            <div>{sortedMaps.length} time steps available</div>
-            <div>Selected: {selectedDate || 'None'}</div>
-            <div>Range: {sortedMaps[0].date} to {sortedMaps[sortedMaps.length - 1].date}</div>
-          </>
-        ) : (
-          <div>⏳ Loading time series data...</div>
-        )}
-      </div>
-
-      {sortedMaps.length > 0 && (
-        <div style={{ textAlign: 'center' }}>
-          <button
-            style={{
-              background: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginRight: '8px'
-            }}
-            onClick={() => {
-              if (onDateChange && sortedMaps[0]) {
-                onDateChange(sortedMaps[0].date);
-              }
-            }}
-          >
-            ⏮ First
-          </button>
-
-          <button
-            style={{
-              background: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginRight: '8px'
-            }}
-            onClick={() => {
-              if (onDateChange && sortedMaps[Math.floor(sortedMaps.length / 2)]) {
-                onDateChange(sortedMaps[Math.floor(sortedMaps.length / 2)].date);
-              }
-            }}
-          >
-            ⏯ Middle
-          </button>
-
-          <button
-            style={{
-              background: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-            onClick={() => {
-              if (onDateChange && sortedMaps[sortedMaps.length - 1]) {
-                onDateChange(sortedMaps[sortedMaps.length - 1].date);
-              }
-            }}
-          >
-            ⏭ Last
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
 export default function Home() {
   const [mapUrl, setMapUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -153,6 +31,14 @@ export default function Home() {
   // Date range for analysis
   const [startDate, setStartDate] = useState(new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Flood-specific date ranges
+  const [floodDates, setFloodDates] = useState({
+    beforeStart: '2020-10-01',
+    beforeEnd: '2020-11-01',
+    afterStart: '2020-11-02',
+    afterEnd: '2020-11-25'
+  });
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState(null);
@@ -190,10 +76,17 @@ export default function Home() {
   // Animation state
   const [isAnimationPlaying, setIsAnimationPlaying] = useState(false);
 
-
-
   const [showModal, setShowModal] = useState(true);
 
+  // Flood-specific state
+  const [floodMaps, setFloodMaps] = useState({
+    before: null,
+    after: null,
+    difference: null,
+    flooded: null
+  });
+  const [selectedFloodView, setSelectedFloodView] = useState('flooded'); // 'before', 'after', 'difference', 'flooded'
+  const [floodStatistics, setFloodStatistics] = useState(null);
 
   useEffect(() => {
     if (selectedRegion) {
@@ -220,19 +113,28 @@ export default function Home() {
     setSelectedMunicipality(null);
   }, [selectedProvince]);
 
-  // Show panels when NDVI layer is selected
+  // Show panels based on selected layer
   useEffect(() => {
     if (selectedLayer === 'ndvi') {
       setIsLegendVisible(true);
       setIsGraphVisible(true);
       setIsTimeControllerVisible(true);
       setShowModal(false);
-
     } else if (selectedLayer === 'lulc') {
       setIsLegendVisible(true);
       setIsGraphVisible(false);
       setIsTimeControllerVisible(false);
       // Reset time series data for non-NDVI layers
+      setTimeSeriesData([]);
+      setTimeSeriesMaps([]);
+      setCalendarDayAverages([]);
+      setSelectedDate(null);
+      setShowModal(false);
+    } else if (selectedLayer === 'flood') {
+      setIsLegendVisible(true);
+      setIsGraphVisible(false);
+      setIsTimeControllerVisible(false);
+      // Reset time series data
       setTimeSeriesData([]);
       setTimeSeriesMaps([]);
       setCalendarDayAverages([]);
@@ -247,25 +149,22 @@ export default function Home() {
       setCalendarDayAverages([]);
       setSelectedDate(null);
     }
-
   }, [selectedLayer, timeSeriesMaps.length, calendarDayAverages.length]);
 
   // Function to update map view when bounds/center/zoom changes
   useEffect(() => {
     if (mapInstance && bounds) {
       try {
-        // Use fitBounds if bounds are available for more precise fitting
         const leafletBounds = [
           [bounds.south, bounds.west],
           [bounds.north, bounds.east]
         ];
         mapInstance.fitBounds(leafletBounds, {
-          padding: [20, 20], // Add some padding around the bounds
-          maxZoom: 15 // Prevent zooming in too much for small areas
+          padding: [20, 20],
+          maxZoom: 15
         });
       } catch (e) {
         console.warn('Error fitting bounds, using center/zoom fallback:', e);
-        // Fallback to center/zoom if fitBounds fails
         mapInstance.setView([center[0], center[1]], zoom);
       }
     } else if (mapInstance && center && zoom) {
@@ -286,6 +185,13 @@ export default function Home() {
     }
   }, [selectedDate, timeSeriesMaps]);
 
+  // Update map URL for flood view changes
+  useEffect(() => {
+    if (selectedLayer === 'flood' && floodMaps[selectedFloodView]) {
+      setMapUrl(floodMaps[selectedFloodView]);
+    }
+  }, [selectedFloodView, floodMaps, selectedLayer]);
+
   const fetchMapData = async (start = startDate, end = endDate, layerType = selectedLayer) => {
     if (!layerType) {
       console.log('No layer selected, skipping fetch');
@@ -297,11 +203,20 @@ export default function Home() {
       setIsUpdating(true);
       setError(null);
 
-      // Use the appropriate endpoint based on layer type
-      const endpoint = layerType === 'ndvi' ? '/api/ndvi' : '/api/lulc';
+      let endpoint, queryParams;
 
-      // Build query parameters
-      let queryParams = `startDate=${start}&endDate=${end}`;
+      if (layerType === 'flood') {
+        endpoint = '/api/flood';
+        queryParams = `beforeStart=${floodDates.beforeStart}&beforeEnd=${floodDates.beforeEnd}&afterStart=${floodDates.afterStart}&afterEnd=${floodDates.afterEnd}`;
+      } else {
+        endpoint = layerType === 'ndvi' ? '/api/ndvi' : '/api/lulc';
+        queryParams = `startDate=${start}&endDate=${end}`;
+        if (layerType === 'ndvi') {
+          queryParams += '&includeTimeSeries=true';
+        }
+      }
+
+      // Add location parameters
       if (selectedRegion) {
         queryParams += `&region=${selectedRegion}`;
       }
@@ -312,62 +227,59 @@ export default function Home() {
         queryParams += `&municipality=${selectedMunicipality}`;
       }
 
-      // Enable time series for NDVI
-      if (layerType === 'ndvi') {
-        queryParams += '&includeTimeSeries=true';
-      }
-
       console.log(`Fetching data from ${endpoint} with params:`, queryParams);
       const response = await axios.get(`${endpoint}?${queryParams}`);
 
       if (response.data.success) {
-        // Handle both old and new response formats
-        const url = response.data.tileUrlTemplate || response.data.mapUrl?.urlFormat || response.data.mapUrl;
+        // Handle flood response differently
+        if (layerType === 'flood') {
+          console.log('Received flood data:', response.data);
+          
+          // Store all flood map URLs
+          setFloodMaps({
+            before: response.data.maps.before?.urlFormat || response.data.maps.before,
+            after: response.data.maps.after?.urlFormat || response.data.maps.after,
+            difference: response.data.maps.difference?.urlFormat || response.data.maps.difference,
+            flooded: response.data.maps.flooded?.urlFormat || response.data.maps.flooded
+          });
+          
+          // Set the default view to flooded areas
+          setMapUrl(response.data.maps.flooded?.urlFormat || response.data.maps.flooded);
+          setSelectedFloodView('flooded');
+          
+          // Store flood statistics
+          setFloodStatistics(response.data.statistics);
+        } else {
+          // Handle NDVI and LULC as before
+          const url = response.data.tileUrlTemplate || response.data.mapUrl?.urlFormat || response.data.mapUrl;
+          setMapUrl(url);
+          
+          // Handle time series data for NDVI
+          if (layerType === 'ndvi' && response.data.timeSeries) {
+            setTimeSeriesData(response.data.timeSeries.data || []);
+            setTimeSeriesMaps(response.data.timeSeries.maps || []);
+            setCalendarDayAverages(response.data.timeSeries.calendarDayAverages || []);
+            setTimeSeriesMetadata(response.data.timeSeries);
 
-        console.log('Received map data:', {
-          url: url,
-          center: response.data.center,
-          zoom: response.data.zoom,
-          bounds: response.data.bounds
-        });
+            if (response.data.timeSeries.maps && response.data.timeSeries.maps.length > 0) {
+              const sortedMaps = [...response.data.timeSeries.maps].sort((a, b) => new Date(b.date) - new Date(a.date));
+              setSelectedDate(sortedMaps[0].date);
+            }
+          }
+        }
 
-        setMapUrl(url);
-
-        // Update map view based on API response
+        // Update map view
         if (response.data.center && response.data.center.latitude && response.data.center.longitude) {
           const newCenter = [response.data.center.latitude, response.data.center.longitude];
           setCenter(newCenter);
-          console.log('Setting new center:', newCenter);
         }
 
         if (response.data.zoom && response.data.zoom > 0) {
           setZoom(response.data.zoom);
-          console.log('Setting new zoom:', response.data.zoom);
         }
 
         if (response.data.bounds) {
           setBounds(response.data.bounds);
-          console.log('Setting new bounds:', response.data.bounds);
-        }
-
-        // Handle time series data for NDVI
-        if (layerType === 'ndvi' && response.data.timeSeries) {
-          setTimeSeriesData(response.data.timeSeries.data || []);
-          setTimeSeriesMaps(response.data.timeSeries.maps || []);
-          setCalendarDayAverages(response.data.timeSeries.calendarDayAverages || []);
-          setTimeSeriesMetadata(response.data.timeSeries);
-
-          console.log('Time series data:', {
-            dataPoints: response.data.timeSeries.data?.length,
-            maps: response.data.timeSeries.maps?.length,
-            calendarAverages: response.data.timeSeries.calendarDayAverages?.length
-          });
-
-          // Set initial selected date to the most recent available
-          if (response.data.timeSeries.maps && response.data.timeSeries.maps.length > 0) {
-            const sortedMaps = [...response.data.timeSeries.maps].sort((a, b) => new Date(b.date) - new Date(a.date));
-            setSelectedDate(sortedMaps[0].date);
-          }
         }
 
         setError(null);
@@ -406,6 +318,16 @@ export default function Home() {
     setTimeSeriesMaps([]);
     setCalendarDayAverages([]);
     setSelectedDate(null);
+    
+    // Reset flood-specific state
+    setFloodMaps({
+      before: null,
+      after: null,
+      difference: null,
+      flooded: null
+    });
+    setFloodStatistics(null);
+    setSelectedFloodView('flooded');
   };
 
   const handleRegionChange = (regionId) => {
@@ -426,6 +348,10 @@ export default function Home() {
   const handleDateChange = ({ startDate: newStartDate, endDate: newEndDate }) => {
     setStartDate(newStartDate);
     setEndDate(newEndDate);
+  };
+
+  const handleFloodDateChange = (dates) => {
+    setFloodDates(dates);
   };
 
   const handleUpdateMap = (start, end) => {
@@ -470,13 +396,13 @@ export default function Home() {
         {/* Base Map Layer */}
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; <a href=&quot;http://osm.org/copyright&quot;>OpenStreetMap</a> contributors"
+          attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
         />
 
         {/* Data Layer */}
         {activeTileUrl && (
           <TileLayer
-            key={selectedDate || 'static'} // Force re-render when date changes
+            key={`${selectedDate || 'static'}-${selectedFloodView || 'default'}`}
             url={activeTileUrl}
             attribution="Google Earth Engine"
             opacity={0.8}
@@ -488,8 +414,8 @@ export default function Home() {
           <div style={{
             position: 'absolute',
             top: '20px',
-            left: '50%', // Set the left edge to the horizontal center of the parent
-            transform: 'translateX(-50%)', // Shift the element back by half its own width
+            left: '50%',
+            transform: 'translateX(-50%)',
             background: 'rgba(255, 255, 255, 0.95)',
             padding: '12px 16px',
             borderRadius: '6px',
@@ -512,7 +438,9 @@ export default function Home() {
             }}></div>
 
             {loading ?
-              (selectedLayer === 'ndvi' ? 'Loading NDVI time series...' : 'Loading Earth Engine data...') :
+              (selectedLayer === 'ndvi' ? 'Loading NDVI time series...' : 
+               selectedLayer === 'flood' ? 'Processing flood detection...' : 
+               'Loading Earth Engine data...') :
               'Updating map...'}
             <style jsx>{`
               @keyframes spin {
@@ -523,7 +451,7 @@ export default function Home() {
           </div>
         )}
 
-
+        {/* Welcome Modal */}
         {!selectedLayer && !loading && showModal && (
           <div style={{
             position: 'absolute',
@@ -538,7 +466,6 @@ export default function Home() {
             textAlign: 'center',
             maxWidth: '300px'
           }}>
-            {/* Close Button */}
             <button
               onClick={() => { setShowModal(false); }}
               style={{
@@ -556,7 +483,6 @@ export default function Home() {
             >
               &times;
             </button>
-            {/* End of Close Button */}
             <div style={{
               fontSize: '48px',
               marginBottom: '16px'
@@ -580,53 +506,99 @@ export default function Home() {
           </div>
         )}
 
-        {/* Debug Info Panel (remove in production) */}
-        {selectedLayer === 'ndvi' && (
+        {/* Flood View Selector */}
+        {selectedLayer === 'flood' && floodMaps.flooded && (
           <div style={{
             position: 'absolute',
-            bottom: '20px',
+            top: '20px',
             right: '20px',
-            background: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
+            background: 'rgba(255, 255, 255, 0.95)',
             padding: '12px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            zIndex: 999,
-            maxWidth: '200px'
+            borderRadius: '8px',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            minWidth: '200px'
           }}>
-            <div><strong>Debug Info:</strong></div>
-            <div>Layer: {selectedLayer}</div>
-            <div>Time series maps: {timeSeriesMaps.length}</div>
-            <div>Calendar averages: {calendarDayAverages.length}</div>
-            <div>Time controller visible: {isTimeControllerVisible ? 'Yes' : 'No'}</div>
-            <div>Selected date: {selectedDate || 'None'}</div>
-            <div>Loading: {loading ? 'Yes' : 'No'}</div>
-            <div>Updating: {isUpdating ? 'Yes' : 'No'}</div>
+            <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '10px', color: '#343a40' }}>
+              Flood Analysis Views
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button
+                onClick={() => setSelectedFloodView('flooded')}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  background: selectedFloodView === 'flooded' ? '#0066cc' : 'white',
+                  color: selectedFloodView === 'flooded' ? 'white' : '#495057',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: selectedFloodView === 'flooded' ? '600' : '400'
+                }}
+              >
+                🌊 Flooded Areas
+              </button>
+              <button
+                onClick={() => setSelectedFloodView('before')}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  background: selectedFloodView === 'before' ? '#0066cc' : 'white',
+                  color: selectedFloodView === 'before' ? 'white' : '#495057',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: selectedFloodView === 'before' ? '600' : '400'
+                }}
+              >
+                📡 Before Flood
+              </button>
+              <button
+                onClick={() => setSelectedFloodView('after')}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  background: selectedFloodView === 'after' ? '#0066cc' : 'white',
+                  color: selectedFloodView === 'after' ? 'white' : '#495057',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: selectedFloodView === 'after' ? '600' : '400'
+                }}
+              >
+                📡 After Flood
+              </button>
+              <button
+                onClick={() => setSelectedFloodView('difference')}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  background: selectedFloodView === 'difference' ? '#0066cc' : 'white',
+                  color: selectedFloodView === 'difference' ? 'white' : '#495057',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: selectedFloodView === 'difference' ? '600' : '400'
+                }}
+              >
+                🔄 Difference
+              </button>
+            </div>
+            {floodStatistics && (
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #dee2e6' }}>
+                <div style={{ fontSize: '13px', color: '#6c757d', marginBottom: '4px' }}>Flood Extent:</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: '#dc3545' }}>
+                  {floodStatistics.floodedAreaHa} ha
+                </div>
+                <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                  ({floodStatistics.floodedAreaKm2} km²)
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Simple Time Series Controller (for testing) */}
-        {/* <SimpleTimeController
-          timeSeriesMaps={timeSeriesMaps}
-          selectedLayer={selectedLayer}
-          selectedDate={selectedDate}
-          onDateChange={handleTimeSeriesDateChange}
-        /> */}
-
-        {/* Original Time Series Controller - Hidden for now */}
-        {false && selectedLayer === 'ndvi' && (
-          <TimeDimensionController
-            timeSeriesMaps={timeSeriesMaps}
-            isVisible={isTimeControllerVisible && timeSeriesMaps.length > 0}
-            onToggle={toggleTimeController}
-            onDateChange={handleTimeSeriesDateChange}
-            selectedDate={selectedDate}
-            isPlaying={isAnimationPlaying}
-            onPlayStateChange={handleAnimationPlayStateChange}
-          />
-        )}
-
-        {/* Show Time Controller Toggle Button when NDVI is selected but controller is hidden */}
+        {/* Time Controller for NDVI */}
         {selectedLayer === 'ndvi' && timeSeriesMaps.length > 0 && !isTimeControllerVisible && (
           <button
             onClick={toggleTimeController}
@@ -670,6 +642,7 @@ export default function Home() {
           selectedLayer={selectedLayer}
           isVisible={isLegendVisible}
           onToggle={toggleLegend}
+          floodView={selectedFloodView}
         />
 
         {/* NDVI Graph Panel */}
@@ -747,9 +720,11 @@ export default function Home() {
             onProvinceChange={handleProvinceChange}
             onMunicipalityChange={handleMunicipalityChange}
             onDateChange={handleDateChange}
+            onFloodDateChange={handleFloodDateChange}
             onUpdateMap={handleUpdateMap}
             isUpdating={isUpdating}
             error={error}
+            floodDates={floodDates}
           />
         </div>
 
