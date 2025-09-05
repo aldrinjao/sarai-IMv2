@@ -1,4 +1,4 @@
-import key from './_key.json';
+const privateKey = process.env.GOOGLE_SERVICE_KEY;
 
 export default async function handler(req, res) {
 

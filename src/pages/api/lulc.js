@@ -1,5 +1,7 @@
 const ee = require('@google/earthengine');
-const privateKey = require('./ee_key.json');
+// const privateKey = require('./ee_key.json');
+const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
+
 const {
   isValidDate,
   getDateBoundaries,

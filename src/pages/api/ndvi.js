@@ -1,5 +1,10 @@
 const ee = require('@google/earthengine');
-const privateKey = require('./ee_key.json');
+// Or with better error handling:
+if (!process.env.GOOGLE_SERVICE_KEY) {
+  throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
+}
+const privateKey = process.env.GOOGLE_SERVICE_KEY;
+
 const {
   isValidDate,
   getDateBoundaries,
