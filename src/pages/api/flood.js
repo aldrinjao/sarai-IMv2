@@ -295,10 +295,12 @@ export default async function handler(req, res) {
           'Excluded': 'Permanent water bodies, steep slopes (>' + slopeThreshold + '°)',
           'Filtering': 'Speckle filter (' + smoothingRadius + 'm radius), connectivity filter (>' + connectedPixelThreshold + ' pixels)'
         },
-        disclaimer: 'This product has been derived automatically without validation data. All geographic information has limitations due to scale, resolution, date and interpretation of the original source materials.'
+        disclaimer: 'Disclaimer: This product has been derived automatically without validation data. All geographic information has limitations due to the scale, resolution, date and interpretation of the original source materials. No liability concerning the content or the use thereof is assumed by the producer.',
+        script_author: "UN-SPIDER Decembe 2019"
       }
     });
 
+    
   } catch (error) {
     console.error('API Error:', error);
 

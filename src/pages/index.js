@@ -88,6 +88,21 @@ export default function Home() {
   const [selectedFloodView, setSelectedFloodView] = useState('flooded'); // 'before', 'after', 'difference', 'flooded'
   const [floodStatistics, setFloodStatistics] = useState(null);
 
+
+
+  function getOneMonthBefore(dateStr) {
+    const date = new Date(dateStr);
+    const day = date.getDate();
+    date.setMonth(date.getMonth() - 1);
+
+    // Handle cases where the previous month doesn't have the same day (e.g., March 31 -> Feb 28)
+    if (date.getDate() !== day) {
+      date.setDate(0); // last day of previous month
+    }
+
+    return date.toISOString().split('T')[0];
+  }
+
   useEffect(() => {
     if (selectedRegion) {
       console.log(selectedRegion);
@@ -206,8 +221,16 @@ export default function Home() {
       let endpoint, queryParams;
 
       if (layerType === 'flood') {
+
+        // transfer to handle date change
+        var beforeS = getOneMonthBefore(start);
+        var beforeE = start;
+        var beforeStart = getOneMonthBefore(end);
+        var afterE = end;
+
+
         endpoint = '/api/flood';
-        queryParams = `beforeStart=${floodDates.beforeStart}&beforeEnd=${floodDates.beforeEnd}&afterStart=${floodDates.afterStart}&afterEnd=${floodDates.afterEnd}`;
+        queryParams = `beforeStart=${beforeS}&beforeEnd=${beforeE}&afterStart=${afterS}&afterEnd=${afterE}`;
       } else {
         endpoint = layerType === 'ndvi' ? '/api/ndvi' : '/api/lulc';
         queryParams = `startDate=${start}&endDate=${end}`;
@@ -234,7 +257,7 @@ export default function Home() {
         // Handle flood response differently
         if (layerType === 'flood') {
           console.log('Received flood data:', response.data);
-          
+
           // Store all flood map URLs
           setFloodMaps({
             before: response.data.maps.before?.urlFormat || response.data.maps.before,
@@ -242,18 +265,18 @@ export default function Home() {
             difference: response.data.maps.difference?.urlFormat || response.data.maps.difference,
             flooded: response.data.maps.flooded?.urlFormat || response.data.maps.flooded
           });
-          
+
           // Set the default view to flooded areas
           setMapUrl(response.data.maps.flooded?.urlFormat || response.data.maps.flooded);
           setSelectedFloodView('flooded');
-          
+
           // Store flood statistics
           setFloodStatistics(response.data.statistics);
         } else {
           // Handle NDVI and LULC as before
           const url = response.data.tileUrlTemplate || response.data.mapUrl?.urlFormat || response.data.mapUrl;
           setMapUrl(url);
-          
+
           // Handle time series data for NDVI
           if (layerType === 'ndvi' && response.data.timeSeries) {
             setTimeSeriesData(response.data.timeSeries.data || []);
@@ -318,7 +341,7 @@ export default function Home() {
     setTimeSeriesMaps([]);
     setCalendarDayAverages([]);
     setSelectedDate(null);
-    
+
     // Reset flood-specific state
     setFloodMaps({
       before: null,
@@ -346,12 +369,9 @@ export default function Home() {
   };
 
   const handleDateChange = ({ startDate: newStartDate, endDate: newEndDate }) => {
+
     setStartDate(newStartDate);
     setEndDate(newEndDate);
-  };
-
-  const handleFloodDateChange = (dates) => {
-    setFloodDates(dates);
   };
 
   const handleUpdateMap = (start, end) => {
@@ -438,9 +458,9 @@ export default function Home() {
             }}></div>
 
             {loading ?
-              (selectedLayer === 'ndvi' ? 'Loading NDVI time series...' : 
-               selectedLayer === 'flood' ? 'Processing flood detection...' : 
-               'Loading Earth Engine data...') :
+              (selectedLayer === 'ndvi' ? 'Loading NDVI time series...' :
+                selectedLayer === 'flood' ? 'Processing flood detection...' :
+                  'Loading Earth Engine data...') :
               'Updating map...'}
             <style jsx>{`
               @keyframes spin {
@@ -720,11 +740,9 @@ export default function Home() {
             onProvinceChange={handleProvinceChange}
             onMunicipalityChange={handleMunicipalityChange}
             onDateChange={handleDateChange}
-            onFloodDateChange={handleFloodDateChange}
             onUpdateMap={handleUpdateMap}
             isUpdating={isUpdating}
             error={error}
-            floodDates={floodDates}
           />
         </div>
 
