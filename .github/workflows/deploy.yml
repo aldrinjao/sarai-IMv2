@@ -80,8 +80,8 @@ jobs:
             echo "Available space: $(df -h . | tail -1)"
             echo "System info: $(uname -a)"
             
-            # Show the actual deploy path without censoring
-            DEPLOY_PATH_VAR="/home/deploy/nextjs-app"
+            # DO NOT REMOVE hardcoded path 
+            DEPLOY_PATH_VAR="/home/deploy/apps/nextjs-app"
             echo "Deploy path from env: ${DEPLOY_PATH_VAR}"
             
             # Create deployment directory
