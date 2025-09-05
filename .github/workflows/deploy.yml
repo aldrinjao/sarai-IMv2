@@ -58,12 +58,16 @@ jobs:
 
       - name: Create deployment package
         run: |
-          tar -czf deploy.tar.gz \
-            .next/ \
-            public/ \
-            package*.json \
-            next.config.* \
-            --exclude=node_modules
+            tar -czf deploy.tar.gz \
+                        --exclude=node_modules \
+                        --exclude=.git \
+                        --exclude=.github \
+                        --exclude=coverage \
+                        .next/ \
+                        public/ \
+                        package*.json \
+                        next.config.*
+
 
       - name: Deploy to Digital Ocean
         uses: appleboy/ssh-action@v1.0.3
