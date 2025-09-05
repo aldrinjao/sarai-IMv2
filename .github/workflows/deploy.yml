@@ -53,25 +53,18 @@ jobs:
         host: ${{ secrets.DEPLOY_HOST }}
         username: ${{ secrets.DEPLOY_USER }}
         key: ${{ secrets.DEPLOY_KEY }}
+        
         script: |
-          # Navigate to app directory
           cd ${{ secrets.DEPLOY_PATH }}
-          
-          # Secure permissions
           echo '${{ secrets.GOOGLE_SERVICE_KEY }}' > key.json
-          chmod 600 key.json            
-      
-          # Pull latest code
+          chmod 600 key.json
+
           git pull origin main || (git clone https://github.com/${{ github.repository }}.git . && git checkout main)
-          
-          # Install dependencies
           npm ci
-          
-          # Build the application
+
+          # Set env variable for build and run
+          export GOOGLE_SERVICE_KEY='${{ secrets.GOOGLE_SERVICE_KEY }}'
+
           npm run build
-          
-          # Restart PM2 process
           pm2 restart nextjs-app || pm2 start npm --name "nextjs-app" -- start
-          
-          # Save PM2 configuration
           pm2 save
