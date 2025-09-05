@@ -3,7 +3,11 @@ name: Deploy Next.js to Digital Ocean
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
 
+    
 jobs:
   deploy:
     runs-on: ubuntu-latest
