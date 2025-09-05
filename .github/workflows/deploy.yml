@@ -81,7 +81,7 @@ jobs:
             echo "System info: $(uname -a)"
             
             # Show the actual deploy path without censoring
-            DEPLOY_PATH_VAR="~/apps/nextjs-app"
+            DEPLOY_PATH_VAR="/home/deploy/apps/nextjs-app"
             echo "Deploy path from env: ${DEPLOY_PATH_VAR}"
             
             # Create deployment directory
