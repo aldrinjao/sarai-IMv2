@@ -6,65 +6,138 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  NODE_VERSION: '18'
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Run tests
-      run: npm test -- --watchAll=false
-    
-    - name: Run linter
-      run: npm run lint
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --watchAll=false --coverage
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+        continue-on-error: false
 
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build application
-      run: npm run build
-    
-    - name: Deploy to Digital Ocean
-      uses: appleboy/ssh-action@v0.1.5
-      with:
-        host: ${{ secrets.DEPLOY_HOST }}
-        username: ${{ secrets.DEPLOY_USER }}
-        key: ${{ secrets.DEPLOY_KEY }}
-        
-        script: |
-          cd ${{ secrets.DEPLOY_PATH }}
-          echo '${{ secrets.GOOGLE_SERVICE_KEY }}' > key.json
-          chmod 600 key.json
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-          git pull origin main || (git clone https://github.com/${{ github.repository }}.git . && git checkout main)
-          npm ci
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-          # Set env variable for build and run
-          export GOOGLE_SERVICE_KEY='${{ secrets.GOOGLE_SERVICE_KEY }}'
+      - name: Install dependencies
+        run: npm ci
 
-          npm run build
-          pm2 restart nextjs-app || pm2 start npm --name "nextjs-app" -- start
-          pm2 save
+      - name: Build application
+        run: npm run build
+        env:
+          GOOGLE_SERVICE_KEY: ${{ secrets.GOOGLE_SERVICE_KEY }}
+
+      - name: Create deployment package
+        run: |
+          tar -czf deploy.tar.gz \
+            .next/ \
+            public/ \
+            package*.json \
+            next.config.* \
+            --exclude=node_modules
+
+      - name: Deploy to Digital Ocean
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          timeout: 300s
+          script_stop: true
+          script: |
+            set -e
+            
+            # Create deployment directory if it doesn't exist
+            mkdir -p ${{ secrets.DEPLOY_PATH }}
+            cd ${{ secrets.DEPLOY_PATH }}
+            
+            # Backup current deployment
+            if [ -d ".next" ]; then
+              cp -r .next .next.backup || true
+            fi
+            
+            # Pull latest code
+            if [ -d ".git" ]; then
+              git pull origin main
+            else
+              git clone https://github.com/${{ github.repository }}.git .
+              git checkout main
+            fi
+            
+            # Install production dependencies
+            npm ci --only=production
+            
+            # Set environment variables
+            export NODE_ENV=production
+            export GOOGLE_SERVICE_KEY='${{ secrets.GOOGLE_SERVICE_KEY }}'
+            
+            # Build application on server (alternative approach)
+            # npm run build
+            
+            # Restart application with zero-downtime
+            if pm2 list | grep -q "nextjs-app"; then
+              pm2 reload nextjs-app --wait-ready
+            else
+              pm2 start npm --name "nextjs-app" -- start
+            fi
+            
+            # Save PM2 configuration
+            pm2 save
+            
+            # Health check
+            sleep 5
+            if ! pm2 list | grep -q "nextjs-app.*online"; then
+              echo "Deployment failed - rolling back"
+              if [ -d ".next.backup" ]; then
+                rm -rf .next
+                mv .next.backup .next
+                pm2 restart nextjs-app
+              fi
+              exit 1
+            fi
+            
+            # Cleanup backup
+            rm -rf .next.backup || true
+            
+            echo "Deployment completed successfully"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful"
+          else
+            echo "❌ Deployment failed"
+          fi
