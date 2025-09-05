@@ -5,7 +5,7 @@ const nextConfig = {
   
   // Environment variables for production
   env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
+    GOOGLE_SERVICE_KEY: process.env.GOOGLE_SERVICE_KEY,
   },
 
   // Optimize images
