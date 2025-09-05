@@ -11,27 +11,29 @@ env:
 
 jobs:
   # test:
-    # runs-on: ubuntu-latest
-    # steps:
-    #   - name: Checkout code
-    #     uses: actions/checkout@v4
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-    #   - name: Setup Node.js
-    #     uses: actions/setup-node@v4
-    #     with:
-    #       node-version: ${{ env.NODE_VERSION }}
-    #       cache: 'npm'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
 
-    #   - name: Install dependencies
-    #     run: npm ci
+  #     - name: Install dependencies
+  #       run: npm ci
 
-    #   - name: Run tests
-    #     run: npm test -- --watchAll=false --coverage
+  #     - name: Run tests
+  #       run: npm test -- --watchAll=false --coverage
 
-    #   - name: Run linter
-    #     run: npm run lint
+  #     - name: Run linter
+  #       run: npm run lint
 
-    #     continue-on-error: false
+  #     - name: Type check
+  #       run: npm run type-check
+  #       continue-on-error: false
 
   build-and-deploy:
     # needs: test
@@ -58,15 +60,15 @@ jobs:
 
       - name: Create deployment package
         run: |
-            tar -czf deploy.tar.gz \
-                        --exclude=node_modules \
-                        --exclude=.git \
-                        --exclude=.github \
-                        --exclude=coverage \
-                        .next/ \
-                        public/ \
-                        package*.json \
-                        next.config.*
+          tar -czf deploy.tar.gz \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=coverage \
+            .next/ \
+            public/ \
+            package*.json \
+            next.config.*
 
       - name: Validate deployment secrets
         run: |
@@ -84,52 +86,70 @@ jobs:
           fi
           echo "✅ All required deployment secrets are set"
 
-
       - name: Deploy to Digital Ocean
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          password: ${{ secrets.DEPLOY_PASSWORD}}
           key: ${{ secrets.DEPLOY_KEY }}
-
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
           timeout: 300s
           script_stop: true
           script: |
             set -e
             
+            # Debug: Print current directory and user
+            echo "Current user: $(whoami)"
+            echo "Current directory: $(pwd)"
+            echo "Home directory: $HOME"
+            
             # Create deployment directory if it doesn't exist
-            mkdir -p ${{ secrets.DEPLOY_PATH }}
-            cd ${{ secrets.DEPLOY_PATH }}
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            echo "Deploy path: '$DEPLOY_PATH'"
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+            echo "Changed to directory: $(pwd)"
+            
+            # Check if required tools are installed
+            echo "Checking required tools..."
+            command -v git >/dev/null 2>&1 || { echo "git is not installed"; exit 1; }
+            command -v node >/dev/null 2>&1 || { echo "node is not installed"; exit 1; }
+            command -v npm >/dev/null 2>&1 || { echo "npm is not installed"; exit 1; }
+            command -v pm2 >/dev/null 2>&1 || { echo "pm2 is not installed"; exit 1; }
+            echo "All required tools are available"
             
             # Backup current deployment
             if [ -d ".next" ]; then
+              echo "Backing up current deployment..."
               cp -r .next .next.backup || true
             fi
             
             # Pull latest code
             if [ -d ".git" ]; then
+              echo "Updating existing repository..."
               git pull origin main
             else
+              echo "Cloning repository..."
               git clone https://github.com/${{ github.repository }}.git .
               git checkout main
             fi
             
             # Install production dependencies
+            echo "Installing dependencies..."
             npm ci --only=production
             
             # Set environment variables
             export NODE_ENV=production
             export GOOGLE_SERVICE_KEY='${{ secrets.GOOGLE_SERVICE_KEY }}'
             
-            # Build application on server (alternative approach)
-            # npm run build
+            echo "Starting PM2 process management..."
             
             # Restart application with zero-downtime
             if pm2 list | grep -q "nextjs-app"; then
+              echo "Reloading existing PM2 process..."
               pm2 reload nextjs-app --wait-ready
             else
+              echo "Starting new PM2 process..."
               pm2 start npm --name "nextjs-app" -- start
             fi
             
@@ -137,6 +157,7 @@ jobs:
             pm2 save
             
             # Health check
+            echo "Performing health check..."
             sleep 5
             if ! pm2 list | grep -q "nextjs-app.*online"; then
               echo "Deployment failed - rolling back"
@@ -151,7 +172,7 @@ jobs:
             # Cleanup backup
             rm -rf .next.backup || true
             
-            echo "Deployment completed successfully"
+            echo "✅ Deployment completed successfully"
 
       - name: Notify deployment status
         if: always()
