@@ -3,9 +3,10 @@ const ee = require('@google/earthengine');
 if (!process.env.GOOGLE_SERVICE_KEY) {
   throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
 }
-console.log(privateKey);
 
 const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
+
+console.log(privateKey);
 
 const {
   isValidDate,
