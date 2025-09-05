@@ -68,6 +68,22 @@ jobs:
                         package*.json \
                         next.config.*
 
+      - name: Validate deployment secrets
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "❌ DEPLOY_HOST secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DEPLOY_USER }}" ]; then
+            echo "❌ DEPLOY_USER secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DEPLOY_KEY }}" ]; then
+            echo "❌ DEPLOY_KEY secret is not set"
+            exit 1
+          fi
+          echo "✅ All required deployment secrets are set"
+
 
       - name: Deploy to Digital Ocean
         uses: appleboy/ssh-action@v1.0.3
