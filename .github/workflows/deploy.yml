@@ -3,47 +3,13 @@ name: Deploy Next.js to Digital Ocean
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  NODE_VERSION: '18'
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application
-        run: npm run build
-        env:
-          GOOGLE_SERVICE_KEY: ${{ secrets.GOOGLE_SERVICE_KEY }}
-
-      - name: Create deployment package
-        run: |
-          tar -czf deploy.tar.gz \
-            --exclude=node_modules \
-            --exclude=.git \
-            --exclude=.github \
-            --exclude=coverage \
-            .next/ \
-            public/ \
-            package*.json \
-            next.config.*
-
       - name: Validate deployment secrets
         run: |
           if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
@@ -59,143 +25,35 @@ jobs:
             exit 1
           fi
           echo "✅ All required deployment secrets are set"
-
+         
       - name: Deploy to Digital Ocean
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || '22' }}
-          timeout: 300s
-          script_stop: true
+          port: 22
           script: |
-            #!/bin/bash
-            set -e
+            cd /var/www/sarai-imv2
+
+            echo "🚀 Starting deployment..."
+
+
+            pm2 stop sarai-imv2 || true
+            pm2 delete sarai-imv2 || true
+
+            # Pull latest code
+            git pull origin main
             
-            echo "=== Deployment Debug Info ==="
-            echo "Current user: $(whoami)"
-            echo "Current directory: $(pwd)"
-            echo "Home directory: $HOME"
-            echo "Available space: $(df -h . | tail -1)"
-            echo "System info: $(uname -a)"
-            
-            # DO NOT REMOVE hardcoded path 
-            DEPLOY_PATH_VAR="/home/deploy/apps/nextjs-app"
-            echo "Deploy path from env: ${DEPLOY_PATH_VAR}"
-            
-            # Create deployment directory
-            echo "Creating deploy directory..."
-            mkdir -p "${DEPLOY_PATH_VAR}"
-            cd "${DEPLOY_PATH_VAR}"
-            echo "Changed to directory: $(pwd)"
-            
-            echo "=== Tool Availability ==="
-            echo "Git version: $(git --version 2>/dev/null || echo 'Not installed')"
-            echo "Node version: $(node --version 2>/dev/null || echo 'Not installed')"
-            echo "NPM version: $(npm --version 2>/dev/null || echo 'Not installed')"
-            echo "PM2 status: $(pm2 --version 2>/dev/null || echo 'Not installed')"
-            
-            # Check if tools exist and install if needed
-            if ! command -v node &> /dev/null; then
-                echo "Installing Node.js..."
-                curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-                sudo apt-get install -y nodejs
-            fi
-            
-            if ! command -v pm2 &> /dev/null; then
-                echo "Installing PM2..."
-                sudo npm install -g pm2
-            fi
-            
-            echo "=== Repository Management ==="
-            if [ -d ".git" ]; then
-                echo "Existing git repo found, pulling..."
-                git status || echo "Git status failed"
-                echo "Current branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
-                echo "Pulling from origin main..."
-                git pull origin main || { 
-                    echo "Git pull failed with exit code $?"
-                    echo "Trying to reset and pull again..."
-                    git reset --hard HEAD
-                    git pull origin main || echo "Second pull attempt also failed"
-                }
-            else
-                echo "No git repo found, cloning..."
-                echo "Current directory contents:"
-                ls -la
-                echo "Cloning https://github.com/aldrinjao/sarai-IMv2.git"
-                echo "Git clone command: git clone https://github.com/aldrinjao/sarai-IMv2.git ."
-                
-                git clone https://github.com/aldrinjao/sarai-IMv2.git . 2>&1 || { 
-                    echo "Git clone failed with exit code $?"
-                    echo "Checking network and permissions..."
-                    echo "Can we reach github.com?"
-                    ping -c 2 github.com || echo "Cannot ping github.com"
-                    echo "Current directory permissions:"
-                    ls -la ..
-                    echo "Disk space:"
-                    df -h .
-                    echo "Trying alternative clone method..."
-                    git clone https://github.com/aldrinjao/sarai-IMv2.git temp_repo || {
-                        echo "Alternative clone also failed"
-                        echo "Git configuration:"
-                        git config --list || echo "No git config"
-                        exit 1
-                    }
-                    echo "Moving files from temp directory..."
-                    mv temp_repo/* . 2>/dev/null || echo "No files to move"
-                    mv temp_repo/.* . 2>/dev/null || echo "No hidden files to move"
-                    rm -rf temp_repo
-                }
-                
-                echo "Checkout main branch..."
-                git checkout main || { 
-                    echo "Git checkout failed, trying to create main branch"
-                    git checkout -b main || {
-                        echo "Could not create main branch"
-                        echo "Available branches:"
-                        git branch -a || echo "No branches found"
-                        exit 1
-                    }
-                }
-            fi
-            
-            echo "=== Dependencies ==="
-            echo "Installing production dependencies..."
+            # Install production dependencies
             npm ci --only=production
             
-            echo "=== PM2 Process Management ==="
-            pm2 list
+            # Build application
+            npm run build
             
-            if pm2 list | grep -q "nextjs-app"; then
-                echo "Reloading existing PM2 process..."
-                pm2 reload nextjs-app
-            else
-                echo "Starting new PM2 process..."
-                pm2 start npm --name "nextjs-app" -- start
-            fi
             
+            # Restart using ecosystem config
+            pm2 start ecosystem.config.js
             pm2 save
-            pm2 list
             
-            echo "=== Health Check ==="
-            sleep 3
-            if pm2 list | grep -q "nextjs-app.*online"; then
-                echo "✅ Application is running successfully"
-            else
-                echo "❌ Application failed to start"
-                pm2 logs nextjs-app --lines 20
-                exit 1
-            fi
-            
-            echo "✅ Deployment completed successfully"
-
-      - name: Notify deployment status
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Deployment successful"
-          else
-            echo "❌ Deployment failed"
-          fi
+            echo "✅ Deployment complete"
