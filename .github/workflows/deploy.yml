@@ -81,7 +81,7 @@ jobs:
             echo "System info: $(uname -a)"
             
             # Show the actual deploy path without censoring
-            DEPLOY_PATH_VAR="/home/deploy/apps/nextjs-app"
+            DEPLOY_PATH_VAR="${DEPLOY_PATH}"
             echo "Deploy path from env: ${DEPLOY_PATH_VAR}"
             
             # Create deployment directory
@@ -110,13 +110,55 @@ jobs:
             
             echo "=== Repository Management ==="
             if [ -d ".git" ]; then
-                echo "Updating existing repository..."
-                git status
-                git pull origin main
+                echo "Existing git repo found, pulling..."
+                git status || echo "Git status failed"
+                echo "Current branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
+                echo "Pulling from origin main..."
+                git pull origin main || { 
+                    echo "Git pull failed with exit code $?"
+                    echo "Trying to reset and pull again..."
+                    git reset --hard HEAD
+                    git pull origin main || echo "Second pull attempt also failed"
+                }
             else
-                echo "Cloning fresh repository..."
-                git clone https://github.com/aldrinjao/sarai-IMv2.git .
-                git checkout main
+                echo "No git repo found, cloning..."
+                echo "Current directory contents:"
+                ls -la
+                echo "Cloning https://github.com/aldrinjao/sarai-IMv2.git"
+                echo "Git clone command: git clone https://github.com/aldrinjao/sarai-IMv2.git ."
+                
+                git clone https://github.com/aldrinjao/sarai-IMv2.git . 2>&1 || { 
+                    echo "Git clone failed with exit code $?"
+                    echo "Checking network and permissions..."
+                    echo "Can we reach github.com?"
+                    ping -c 2 github.com || echo "Cannot ping github.com"
+                    echo "Current directory permissions:"
+                    ls -la ..
+                    echo "Disk space:"
+                    df -h .
+                    echo "Trying alternative clone method..."
+                    git clone https://github.com/aldrinjao/sarai-IMv2.git temp_repo || {
+                        echo "Alternative clone also failed"
+                        echo "Git configuration:"
+                        git config --list || echo "No git config"
+                        exit 1
+                    }
+                    echo "Moving files from temp directory..."
+                    mv temp_repo/* . 2>/dev/null || echo "No files to move"
+                    mv temp_repo/.* . 2>/dev/null || echo "No hidden files to move"
+                    rm -rf temp_repo
+                }
+                
+                echo "Checkout main branch..."
+                git checkout main || { 
+                    echo "Git checkout failed, trying to create main branch"
+                    git checkout -b main || {
+                        echo "Could not create main branch"
+                        echo "Available branches:"
+                        git branch -a || echo "No branches found"
+                        exit 1
+                    }
+                }
             fi
             
             echo "=== Dependencies ==="
