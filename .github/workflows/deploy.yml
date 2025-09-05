@@ -57,6 +57,10 @@ jobs:
           # Navigate to app directory
           cd ${{ secrets.DEPLOY_PATH }}
           
+          # Secure permissions
+          echo '${{ secrets.GOOGLE_SERVICE_KEY }}' > key.json
+          chmod 600 key.json            
+      
           # Pull latest code
           git pull origin main || (git clone https://github.com/${{ github.repository }}.git . && git checkout main)
           
