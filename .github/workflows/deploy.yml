@@ -1,6 +1,8 @@
 name: Deploy Next.js to Digital Ocean
 
 on:
+  workflow_dispatch:  # This line creates the button
+
   push:
     branches: [ main ]
   pull_request:
