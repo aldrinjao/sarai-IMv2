@@ -41,7 +41,7 @@ jobs:
             if [ ! -d "/var/www/sarai-imv2/.git" ]; then
               echo "📂 Project not found. Performing initial clone..."
               cd /var/www
-              git clone git@github.com:YOUR_GITHUB_USERNAME/sarai-imv2.git
+              git clone git@github.com:aldrinjao/sarai-imv2.git
               cd sarai-imv2
             else
               echo "🔄 Project exists. Pulling latest changes..."
