@@ -1,37 +1,26 @@
 name: Deploy Next.js to Digital Ocean
 
 on:
-  workflow_dispatch:  # This line creates the button
-
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
     types: [ closed ]
 
-    
 jobs:
   deploy:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
       - name: Validate deployment secrets
         run: |
-          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
-            echo "❌ DEPLOY_HOST secret is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.DEPLOY_USER }}" ]; then
-            echo "❌ DEPLOY_USER secret is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.DEPLOY_KEY }}" ]; then
-            echo "❌ DEPLOY_KEY secret is not set"
-            exit 1
-          fi
-          echo "✅ All required deployment secrets are set"
-         
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then echo "❌ DEPLOY_HOST missing"; exit 1; fi
+          if [ -z "${{ secrets.DEPLOY_USER }}" ]; then echo "❌ DEPLOY_USER missing"; exit 1; fi
+          if [ -z "${{ secrets.DEPLOY_KEY }}" ]; then echo "❌ DEPLOY_KEY missing"; exit 1; fi
+          echo "✅ All secrets set"
+
       - name: Deploy to Digital Ocean
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -40,26 +29,46 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           port: 22
           script: |
-            cd /var/www/sarai-imv2
-
-            echo "🚀 Starting deployment..."
-
-
-            pm2 stop sarai-imv2 || true
-            pm2 delete sarai-imv2 || true
-
-            # Pull latest code
-            git pull origin main
+            # 1. Setup environment and permissions
+            sudo mkdir -p /var/www
+            sudo chown -R ${{ secrets.DEPLOY_USER }}:${{ secrets.DEPLOY_USER }} /var/www
             
-            # Install production dependencies
-            npm ci --only=production
-            
-            # Build application
+            # 2. Add GitHub to known hosts (prevents hanging on first connection)
+            mkdir -p ~/.ssh
+            ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+            # 3. Check if project folder exists, if not, clone it
+            if [ ! -d "/var/www/sarai-imv2/.git" ]; then
+              echo "📂 Project not found. Performing initial clone..."
+              cd /var/www
+              git clone git@github.com:YOUR_GITHUB_USERNAME/sarai-imv2.git
+              cd sarai-imv2
+            else
+              echo "🔄 Project exists. Pulling latest changes..."
+              cd /var/www/sarai-imv2
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+
+            # 4. Install and Build
+            echo "🚀 Installing dependencies and building..."
+            npm install
             npm run build
+
+            # 5. Smart PM2 Start/Restart
+            # Checks if the process 'sarai-imv2' is already running
+            if pm2 list | grep -q "sarai-imv2"; then
+              echo "♻️ Restarting existing PM2 process..."
+              pm2 restart sarai-imv2
+            else
+              echo "🆕 Starting new PM2 process..."
+              # Ensure ecosystem.config.js exists or use direct next start
+              if [ -f "ecosystem.config.js" ]; then
+                pm2 start ecosystem.config.js
+              else
+                pm2 start npm --name "sarai-imv2" -- start
+              fi
+            fi
             
-            
-            # Restart using ecosystem config
-            pm2 start ecosystem.config.js
             pm2 save
-            
             echo "✅ Deployment complete"
