@@ -1,7 +1,11 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-import Chart from 'chart.js/auto'; // Import Chart.js with auto registration
+import Chart from 'chart.js/auto';
 
+/**
+ * NDVIGraphPanel Component
+ * Displays a multi-year NDVI pattern based on calendar days (1-365).
+ */
 const NDVIGraphPanel = ({ 
   calendarDayAverages, 
   isVisible, 
@@ -12,436 +16,190 @@ const NDVIGraphPanel = ({
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
 
-  // Get current date's calendar day for reference line
-  const getCurrentCalendarDay = () => {
-    if (!selectedDate) return null;
-    
-    const date = new Date(selectedDate);
+  // Helper: Get normalized calendar day (handles leap years for alignment)
+  const getNormalizedDay = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
     const start = new Date(date.getFullYear(), 0, 0);
     const diff = date - start;
-    const calendarDay = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const day = Math.floor(diff / (1000 * 60 * 60 * 24));
     
-    // Normalize for leap year
     const isLeapYear = (date.getFullYear() % 4 === 0 && date.getFullYear() % 100 !== 0) || (date.getFullYear() % 400 === 0);
-    return isLeapYear && calendarDay > 59 ? calendarDay - 1 : calendarDay;
+    return (isLeapYear && day > 59) ? day - 1 : day;
   };
 
-  // Format calendar day averages for the chart
-  const formatChartData = () => {
-    if (!calendarDayAverages || calendarDayAverages.length === 0) {
-      return { labels: [], datasets: [] };
-    }
-
-    const sortedData = [...calendarDayAverages].sort((a, b) => a.calendarDay - b.calendarDay);
-    const labels = sortedData.map(item => item.calendarDay);
-    const meanData = sortedData.map(item => item.ndvi_mean);
-    const medianData = sortedData.map(item => item.ndvi_median);
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'Multi-year Average',
-          data: meanData,
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.1,
-          pointRadius: 0,
-          pointHoverRadius: 4
-        },
-        {
-          label: 'Multi-year Median',
-          data: medianData,
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          borderWidth: 1.5,
-          borderDash: [4, 4],
-          fill: false,
-          tension: 0.1,
-          pointRadius: 0,
-          pointHoverRadius: 4
-        }
-      ]
-    };
-  };
-
-  // Initialize/update chart
   useEffect(() => {
-    if (!chartRef.current || !isVisible) {
-      // Clean up if not visible
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-        chartInstance.current = null;
-      }
-      return;
+    // 1. Cleanup: Destroy existing chart if hidden or data changes
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+      chartInstance.current = null;
     }
+
+    if (!isVisible || !chartRef.current || !calendarDayAverages?.length) return;
 
     const ctx = chartRef.current.getContext('2d');
-    const chartData = formatChartData();
-    const currentDay = getCurrentCalendarDay();
-
-    // Always destroy existing chart first
-    if (chartInstance.current) {
-      try {
-        chartInstance.current.destroy();
-        chartInstance.current = null;
-      } catch (e) {
-        console.warn('Error destroying chart:', e);
+    const currentDay = getNormalizedDay(selectedDate);
+    
+    // 2. Prepare Data
+    const sortedData = [...calendarDayAverages].sort((a, b) => a.calendarDay - b.calendarDay);
+    
+    // 3. Custom Plugin for the "Current Day" vertical line
+    const referenceLinePlugin = {
+      id: 'referenceLines',
+      beforeDraw: (chart) => {
+        if (currentDay && currentDay >= 1 && currentDay <= 365) {
+          const { ctx, scales: { x, y } } = chart;
+          const xPos = x.getPixelForValue(currentDay);
+          ctx.save();
+          ctx.strokeStyle = '#ff6b35'; // Orange line
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(xPos, y.top);
+          ctx.lineTo(xPos, y.bottom);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
-    }
+    };
 
-    // Clear the canvas completely
-    if (ctx) {
-      ctx.clearRect(0, 0, chartRef.current.width, chartRef.current.height);
-    }
-
-    if (chartData.labels.length === 0) {
-      return;
-    }
-
-    // Register Chart.js components - with auto import, this should be automatic
-    // But let's keep it simple and rely on the auto import
-
-    // Create new chart with a small delay to ensure cleanup is complete
-    setTimeout(() => {
-      try {
-        if (!chartRef.current) return; // Component might have unmounted
-
-        // Try creating chart - Chart.js with auto import should work directly
-        try {
-          chart = new Chart(chartRef.current, {
-            type: 'line',
-            data: chartData,
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              animation: {
-                duration: 0 // Disable animations to prevent conflicts
-              },
-              interaction: {
-                intersect: false,
-                mode: 'index'
-              },
-              plugins: {
-                legend: {
-                  display: false // We'll create custom legend
-                },
-                tooltip: {
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  borderColor: '#dee2e6',
-                  borderWidth: 1,
-                  titleColor: '#343a40',
-                  bodyColor: '#6c757d',
-                  cornerRadius: 6,
-                  displayColors: true,
-                  callbacks: {
-                    title: (context) => {
-                      const day = context[0].label;
-                      const date = new Date(2023, 0, day);
-                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                      return `Day ${day} (${monthNames[date.getMonth()]} ${date.getDate()})`;
-                    },
-                    label: (context) => {
-                      const value = context.parsed.y;
-                      const dataPoint = calendarDayAverages.find(item => item.calendarDay == context.label);
-                      let label = `${context.dataset.label}: ${value?.toFixed(3)}`;
-                      if (dataPoint && dataPoint.sampleCount && context.dataset.label === 'Multi-year Average') {
-                        label += ` (${dataPoint.sampleCount} samples)`;
-                      }
-                      return label;
-                    }
-                  }
-                }
-              },
-              scales: {
-                x: {
-                  type: 'linear',
-                  position: 'bottom',
-                  min: 1,
-                  max: 365,
-                  ticks: {
-                    stepSize: 30,
-                    callback: function(value) {
-                      const date = new Date(2023, 0, value);
-                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                      return monthNames[date.getMonth()];
-                    },
-                    font: {
-                      size: 10
-                    },
-                    color: '#6c757d'
-                  },
-                  grid: {
-                    color: '#e9ecef',
-                    drawBorder: false
-                  }
-                },
-                y: {
-                  min: 0,
-                  max: 1,
-                  ticks: {
-                    stepSize: 0.2,
-                    callback: function(value) {
-                      return value.toFixed(1);
-                    },
-                    font: {
-                      size: 10
-                    },
-                    color: '#6c757d'
-                  },
-                  grid: {
-                    color: '#e9ecef',
-                    drawBorder: false
-                  },
-                  title: {
-                    display: true,
-                    text: 'NDVI',
-                    font: {
-                      size: 11
-                    },
-                    color: '#6c757d'
-                  }
+    // 4. Initialize New Chart
+    try {
+      chartInstance.current = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: sortedData.map(d => d.calendarDay),
+          datasets: [
+            {
+              label: 'Multi-year Average',
+              data: sortedData.map(d => d.ndvi_mean),
+              borderColor: '#22c55e', // Green
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Multi-year Median',
+              data: sortedData.map(d => d.ndvi_median),
+              borderColor: '#3b82f6', // Blue
+              borderWidth: 1.5,
+              borderDash: [4, 4],
+              pointRadius: 0,
+              tension: 0.3,
+              fill: false
+            }
+          ]
+        },
+        plugins: [referenceLinePlugin],
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false, // Prevents glitches on rapid updates
+          interaction: { intersect: false, mode: 'index' },
+          plugins: {
+            legend: { display: false }, // Using custom footer legend
+            tooltip: {
+              callbacks: {
+                title: (context) => {
+                  const day = context[0].label;
+                  const date = new Date(2023, 0, day); // Dummy year for labels
+                  return `Day ${day} (${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
                 }
               }
             }
-          });
-
-          // Add reference line after chart creation
-          if (currentDay && currentDay >= 1 && currentDay <= 365) {
-            const plugin = {
-              id: 'referenceLines',
-              beforeDraw: (chart) => {
-                const ctx = chart.ctx;
-                const xScale = chart.scales.x;
-                const yScale = chart.scales.y;
-                const xPos = xScale.getPixelForValue(currentDay);
-                
-                ctx.save();
-                ctx.strokeStyle = '#ff6b35';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.globalAlpha = 0.7;
-                ctx.beginPath();
-                ctx.moveTo(xPos, yScale.top);
-                ctx.lineTo(xPos, yScale.bottom);
-                ctx.stroke();
-                ctx.restore();
-              }
-            };
-            
-            // Register the plugin manually
-            Chart.register(plugin);
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              min: 1,
+              max: 365,
+              ticks: {
+                stepSize: 30,
+                callback: (val) => {
+                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  const d = new Date(2023, 0, val);
+                  return val % 30 === 0 ? months[d.getMonth()] : '';
+                }
+              },
+              grid: { display: false }
+            },
+            y: {
+              min: 0,
+              max: 1.0,
+              title: { display: true, text: 'NDVI Value' },
+              ticks: { stepSize: 0.2 }
+            }
           }
-
-        } catch (error) {
-          console.error('Chart creation failed:', error);
-          throw error;
         }
+      });
+    } catch (err) {
+      console.error("Chart creation error:", err);
+    }
 
-        chartInstance.current = chart;
-
-      } catch (error) {
-        console.error('Error creating chart:', error);
-
-      }
-    }, 10); // Small delay to ensure cleanup
-
+    // Cleanup on unmount
     return () => {
       if (chartInstance.current) {
-        try {
-          chartInstance.current.destroy();
-          chartInstance.current = null;
-        } catch (e) {
-          console.warn('Error destroying chart in cleanup:', e);
-        }
+        chartInstance.current.destroy();
+        chartInstance.current = null;
       }
     };
-  }, [calendarDayAverages, selectedDate, isVisible]);
-
-  const currentDay = getCurrentCalendarDay();
+  }, [calendarDayAverages, isVisible, selectedDate]);
 
   if (!isVisible) {
     return (
-      <button
-        onClick={onToggle}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          zIndex: 1001,
-          background: 'rgba(255, 255, 255, 0.95)',
-          border: '1px solid #dee2e6',
-          borderRadius: '6px',
-          padding: '10px 12px',
-          cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          fontSize: '14px',
-          transition: 'all 0.3s ease',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontWeight: '500',
-          color: '#495057'
-        }}
-        title="Show NDVI Graph"
-        onMouseEnter={(e) => {
-          e.target.style.background = 'rgba(255, 255, 255, 1)';
-          e.target.style.transform = 'scale(1.05)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.background = 'rgba(255, 255, 255, 0.95)';
-          e.target.style.transform = 'scale(1)';
-        }}
-      >
-        <span>📊</span>
-        NDVI Graph
+      <button onClick={onToggle} style={styles.showBtn}>
+        <span>📊</span> View NDVI Graph
       </button>
     );
   }
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '20px',
-      right: '20px',
-      width: '450px',
-      height: '400px',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      backdropFilter: 'blur(10px)',
-      border: '1px solid #dee2e6',
-      borderRadius: '12px',
-      padding: '16px',
-      zIndex: 1000,
-      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-      fontSize: '13px'
-    }}>
-      {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: '12px' 
-      }}>
+    <div style={styles.container}>
+      <div style={styles.header}>
         <div>
-          <h4 style={{
-            margin: '0 0 4px 0',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#343a40',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <span>🌱</span>
-            NDVI Calendar Pattern
-          </h4>
-          <p style={{
-            margin: 0,
-            fontSize: '11px',
-            color: '#6c757d',
-            lineHeight: '1.3'
-          }}>
-            Multi-year NDVI averages by calendar day (1-365)
-          </p>
+          <h4 style={styles.title}>🌱 NDVI Calendar Pattern</h4>
+          <p style={styles.subtitle}>Average vegetation health by day of year</p>
         </div>
-        <button
-          onClick={onToggle}
-          style={{
-            background: 'transparent',
-            border: '1px solid #dee2e6',
-            borderRadius: '4px',
-            padding: '4px 8px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            color: '#6c757d'
-          }}
-        >
-          ×
-        </button>
+        <button onClick={onToggle} style={styles.closeBtn}>×</button>
       </div>
 
-      {/* Chart */}
-      <div style={{ height: '280px', width: '100%' }}>
-        {calendarDayAverages && calendarDayAverages.length > 0 ? (
-          <canvas 
-            ref={chartRef}
-            style={{ width: '100%', height: '100%' }}
-          />
-        ) : (
-          <div style={{
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#6c757d',
-            fontSize: '14px',
-            textAlign: 'center'
-          }}>
-            <div>
-              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
-              No time series data available.<br />
-              Select a longer date range to see the calendar pattern.
-            </div>
-          </div>
+      <div style={styles.chartWrapper}>
+        <canvas ref={chartRef} />
+      </div>
+
+      <div style={styles.footer}>
+        <div style={styles.legendItem}><div style={{...styles.dot, background: '#22c55e'}}/> Mean</div>
+        <div style={styles.legendItem}><div style={{...styles.dot, background: '#3b82f6', borderRadius: '0'}}/> Median</div>
+        {selectedDate && (
+          <div style={styles.legendItem}><div style={{...styles.dot, background: '#ff6b35', height: '10px'}}/> Selected</div>
         )}
-      </div>
-
-      {/* Info Footer */}
-      <div style={{
-        paddingTop: '12px',
-        borderTop: '1px solid #e9ecef',
-        fontSize: '10px',
-        color: '#6c757d',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div>
-          {metadata && (
-            <span>
-              {metadata.dateRange?.start} to {metadata.dateRange?.end}
-              {metadata.totalImages && ` • ${metadata.totalImages} images`}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ 
-              width: '12px', 
-              height: '2px', 
-              backgroundColor: '#22c55e' 
-            }}></div>
-            <span>Mean</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{ 
-              width: '12px', 
-              height: '2px', 
-              backgroundColor: '#3b82f6',
-              borderTop: '1px dashed #3b82f6',
-              borderBottom: '1px dashed #3b82f6'
-            }}></div>
-            <span>Median</span>
-          </div>
-          {currentDay && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{ 
-                width: '12px', 
-                height: '2px', 
-                backgroundColor: '#ff6b35',
-                borderTop: '1px dashed #ff6b35'
-              }}></div>
-              <span>Current</span>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
+};
+
+const styles = {
+  container: {
+    position: 'absolute', top: '20px', right: '20px', width: '420px', height: '360px',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)',
+    borderRadius: '12px', padding: '16px', zIndex: 1000, boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+    border: '1px solid #ddd', display: 'flex', flexDirection: 'column'
+  },
+  header: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px' },
+  title: { margin: 0, fontSize: '16px', color: '#333' },
+  subtitle: { margin: 0, fontSize: '11px', color: '#777' },
+  closeBtn: { border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', color: '#999' },
+  chartWrapper: { flex: 1, position: 'relative' },
+  footer: { display: 'flex', gap: '15px', marginTop: '10px', fontSize: '11px', color: '#555', borderTop: '1px solid #eee', paddingTop: '10px' },
+  legendItem: { display: 'flex', alignItems: 'center', gap: '5px' },
+  dot: { width: '8px', height: '8px', borderRadius: '50%' },
+  showBtn: {
+    position: 'absolute', top: '20px', right: '20px', zIndex: 1001,
+    padding: '10px 15px', borderRadius: '8px', border: '1px solid #ddd',
+    backgroundColor: '#fff', cursor: 'pointer', fontWeight: '500', boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+  }
 };
 
 export default NDVIGraphPanel;

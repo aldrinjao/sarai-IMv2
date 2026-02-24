@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     // Set default dates if not provided (last 2 years for better time series)
     const defaultEndDate = new Date().toISOString().split('T')[0];
     const defaultStartDate = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
+
     const finalStartDate = startDate || defaultStartDate;
     const finalEndDate = endDate || defaultEndDate;
 
@@ -112,9 +112,16 @@ export default async function handler(req, res) {
 
     // NDVI color palette (red to green)
     const ndviVis = [
-      'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
-      '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
-      '012E01', '011D01', '011301'
+      '#FFFFFF', // White (Min NDVI: 0)
+      '#f7fcf5', // Very pale green
+      '#e5f5e0',
+      '#c7e9c0',
+      '#a1d99b',
+      '#74c476',
+      '#41ab5d',
+      '#238b45',
+      '#006d2c',
+      '#00441b'  // Deep Dark Green (Max NDVI: 0.8/1.0)
     ];
 
     const visParams = {
@@ -137,7 +144,7 @@ export default async function handler(req, res) {
       const timeSeries = ndviCollection.map(image => {
         const date = ee.Date(image.get('system:time_start'));
         const dateString = date.format('YYYY-MM-dd');
-        
+
         // Calculate statistics for the ROI
         const stats = image.reduceRegion({
           reducer: ee.Reducer.mean().combine({
@@ -151,7 +158,7 @@ export default async function handler(req, res) {
           scale: 250,
           maxPixels: 1e9
         });
-        
+
         return ee.Feature(null, {
           date: dateString,
           timestamp: date.millis(),
@@ -163,7 +170,7 @@ export default async function handler(req, res) {
 
       try {
         const timeSeriesResults = await evaluateEE(timeSeries.toList(collectionSize));
-        
+
         // Process time series data with calendar day calculation
         timeSeriesData = timeSeriesResults.map(item => {
           const date = item.properties.date;
@@ -171,7 +178,7 @@ export default async function handler(req, res) {
           const year = new Date(date).getFullYear();
           const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
           const normalizedDay = normalizeCalendarDay(calendarDay, isLeapYear);
-          
+
           return {
             date: date,
             timestamp: item.properties.timestamp,
@@ -188,12 +195,12 @@ export default async function handler(req, res) {
 
         // Generate individual maps for time series using date-based filtering
         console.log('Generating time series maps using date filtering...');
-        
+
         // Use the time series data we already have to generate maps
         const maxMaps = Math.min(15, timeSeriesData.length); // Reduced limit for performance
         const sampleIndices = [];
-        
-        // Sample evenly across the time series
+
+        // Sample evenly across the time series data to get a representative set of maps
         if (timeSeriesData.length > 0) {
           const step = Math.max(1, Math.floor(timeSeriesData.length / maxMaps));
           for (let i = 0; i < timeSeriesData.length; i += step) {
@@ -201,47 +208,76 @@ export default async function handler(req, res) {
             if (sampleIndices.length >= maxMaps) break;
           }
         }
-        
+
         console.log(`Generating ${sampleIndices.length} sample maps from ${timeSeriesData.length} time points`);
-        
-        for (let i = 0; i < sampleIndices.length; i++) {
+
+        // for (let i = 0; i < sampleIndices.length; i++) {
+        //   try {
+        //     const dataPoint = timeSeriesData[sampleIndices[i]];
+        //     const dateString = dataPoint.date;
+
+        //     // Create date range for filtering (16-day window to match MODIS composite)
+        //     const startDate = new Date(dateString);
+        //     const endDate = new Date(startDate);
+        //     endDate.setDate(endDate.getDate() + 16);
+
+        //     // Filter collection to get image for this specific date
+        //     const dateFilteredImage = ndviCollection
+        //       .filterDate(startDate.toISOString().split('T')[0], 
+        //                  endDate.toISOString().split('T')[0])
+        //       .sort('system:time_start')
+        //       .first()
+        //       .select('NDVI')
+        //       .clip(roi);
+
+        //     const mapUrl = dateFilteredImage.getMap(visParams);
+
+        //     timeSeriesMaps.push({
+        //       date: dateString,
+        //       url: mapUrl.urlFormat || mapUrl,
+        //       timestamp: dataPoint.timestamp
+        //     });
+
+        //     console.log(`Generated map ${i + 1}/${sampleIndices.length} for ${dateString}`);
+
+        //   } catch (error) {
+        //     console.warn(`Failed to generate map for date ${timeSeriesData[sampleIndices[i]]?.date}:`, error.message);
+        //   }
+        // }
+
+
+        const mapPromises = sampleIndices.map(async (idx) => {
           try {
-            const dataPoint = timeSeriesData[sampleIndices[i]];
-            const dateString = dataPoint.date;
-            
-            // Create date range for filtering (16-day window to match MODIS composite)
-            const startDate = new Date(dateString);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 16);
-            
-            // Filter collection to get image for this specific date
-            const dateFilteredImage = ndviCollection
-              .filterDate(startDate.toISOString().split('T')[0], 
-                         endDate.toISOString().split('T')[0])
-              .sort('system:time_start')
+            const dataPoint = timeSeriesData[idx];
+            const d = new Date(dataPoint.date);
+            const windowEnd = new Date(d.getTime() + 16 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            const img = ndviCollection
+              .filterDate(dataPoint.date, windowEnd)
               .first()
               .select('NDVI')
               .clip(roi);
-            
-            const mapUrl = dateFilteredImage.getMap(visParams);
-            
-            timeSeriesMaps.push({
-              date: dateString,
-              url: mapUrl.urlFormat || mapUrl,
+
+            const map = await img.getMap(visParams);
+            return {
+              date: dataPoint.date,
+              url: map.urlFormat,
               timestamp: dataPoint.timestamp
-            });
-            
-            console.log(`Generated map ${i + 1}/${sampleIndices.length} for ${dateString}`);
-            
-          } catch (error) {
-            console.warn(`Failed to generate map for date ${timeSeriesData[sampleIndices[i]]?.date}:`, error.message);
+            };
+          } catch (err) {
+            return null; // Gracefully handle individual failures
           }
-        }
+        });
+
+        const resolvedMaps = await Promise.all(mapPromises);
+        timeSeriesMaps = resolvedMaps.filter(m => m !== null);
+
+
 
       } catch (error) {
         console.warn('Time series generation failed:', error.message);
         console.log('Continuing with median composite only...');
-        
+
         // If time series fails, we still have the median composite
         timeSeriesData = [];
         timeSeriesMaps = [];
@@ -252,14 +288,14 @@ export default async function handler(req, res) {
     const calendarDayAverages = [];
     if (timeSeriesData.length > 0) {
       console.log('Calculating calendar day averages...');
-      
+
       for (let day = 1; day <= 365; day++) {
         const dayData = timeSeriesData.filter(item => item.calendarDay === day);
-        
+
         if (dayData.length > 0) {
           const avgNDVI = dayData.reduce((sum, item) => sum + item.ndvi_mean, 0) / dayData.length;
           const medianNDVI = dayData.reduce((sum, item) => sum + item.ndvi_median, 0) / dayData.length;
-          
+
           calendarDayAverages.push({
             calendarDay: day,
             ndvi_mean: avgNDVI,

@@ -1,13 +1,13 @@
 const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
-  
+
   const getLegendItems = () => {
     if (selectedLayer === 'ndvi') {
       return [
-        { name: 'Bare soil/Rock', color: '#df923d' },
-        { name: 'Sparse vegetation', color: '#f1b555' },
-        { name: 'Moderate vegetation', color: '#99b718' },
-        { name: 'Dense vegetation', color: '#529400' },
-        { name: 'Very dense vegetation', color: '#011301' }
+        { name: 'Bare soil/Rock', color: '#FFFFFF' },
+        { name: 'Sparse vegetation', color: '#c7e9c0' },
+        { name: 'Moderate vegetation', color: '#74c476' },
+        { name: 'Dense vegetation', color: '#238b45' },
+        { name: 'Very dense vegetation', color: '#00441b' }
       ];
     } else if (selectedLayer === 'lulc') {
       return [

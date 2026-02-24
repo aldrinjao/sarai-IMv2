@@ -1,190 +1,120 @@
-const ee = require('@google/earthengine');
+import * as ee from '@google/earthengine';
+
+import {
+  evaluateEE,
+  getAdminGeometry,
+  getDateBoundaries,
+  getGeometryInfo,
+  initializeEE,
+  isValidDate
+} from './function';
+
+// Fail-fast environment check
 if (!process.env.GOOGLE_SERVICE_KEY) {
   throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
 }
+
+console.log(11);
 const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
-
-
-const {
-  isValidDate,
-  getDateBoundaries,
-  evaluateEE,
-  getGeometryInfo,
-  getAdminGeometry,
-  initializeEE
-} = require('./function');
-
 let isInitialized = false;
 
-// Wrapper for Earth Engine initialization to handle state
 const initEE = async () => {
-  if (isInitialized) {
-    return;
-  }
+  if (isInitialized) return;
   await initializeEE(privateKey);
   isInitialized = true;
 };
 
-// Main handler function for flood detection
-export default async function handler(req, res) {
-  try {
-    console.log('Flood Detection API endpoint called');
+const getMapPromise = (image, visParams) => {
+  return new Promise((resolve, reject) => {
+    image.getMap(visParams, (map, err) => {
+      if (err) reject(err);
+      else resolve(map);
+    });
+  });
+};
 
-    // Extract parameters from query string
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+
+  try {
+    // 1. Extract and Pattern Parameters
     const { 
-      beforeStart, 
-      beforeEnd, 
-      afterStart, 
-      afterEnd,
-      region, 
-      province, 
-      municipality,
-      polarization = 'VH', // VH is preferred for flood mapping, but VV is also available
-      passDirection = 'DESCENDING',
-      differenceThreshold = 1.25,
-      smoothingRadius = 50,
-      slopeThreshold = 5,
-      connectedPixelThreshold = 8
+      beforeStart = '2020-10-01', beforeEnd = '2020-11-01', 
+      afterStart = '2020-11-02', afterEnd = '2020-11-25',
+      region, province, municipality,
+      polarization = 'VH', 
+      passDirection = 'DESCENDING'
     } = req.query;
 
-    console.log('Query parameters:', { 
-      beforeStart, beforeEnd, afterStart, afterEnd, 
-      region, province, municipality,
-      polarization, passDirection 
-    });
+    const diffThreshold = parseFloat(req.query.differenceThreshold) || 1.25;
+    const smoothingRadius = parseInt(req.query.smoothingRadius) || 50;
+    const slopeThreshold = parseInt(req.query.slopeThreshold) || 5;
+    const connectedThreshold = parseInt(req.query.connectedPixelThreshold) || 8;
 
-    // Set default dates if not provided
-    // Default to Typhoon Ulysses event as in the original script
-    const defaultBeforeStart = beforeStart || '2020-10-01';
-    const defaultBeforeEnd = beforeEnd || '2020-11-01';
-    const defaultAfterStart = afterStart || '2020-11-02';
-    const defaultAfterEnd = afterEnd || '2020-11-25';
-
-    // Validate date formats
-    if (!isValidDate(defaultBeforeStart) || !isValidDate(defaultBeforeEnd)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid before period date format. Use YYYY-MM-DD format.'
-      });
+    // 2. Validate Dates (Patterned with LULC logic)
+    if (![beforeStart, beforeEnd, afterStart, afterEnd].every(isValidDate)) {
+      return res.status(400).json({ success: false, error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
+    getDateBoundaries(beforeStart, beforeEnd);
+    getDateBoundaries(afterStart, afterEnd);
 
-    if (!isValidDate(defaultAfterStart) || !isValidDate(defaultAfterEnd)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid after period date format. Use YYYY-MM-DD format.'
-      });
-    }
-
-    // Validate date ranges
-    try {
-      getDateBoundaries(defaultBeforeStart, defaultBeforeEnd);
-      getDateBoundaries(defaultAfterStart, defaultAfterEnd);
-    } catch (dateError) {
-      return res.status(400).json({
-        success: false,
-        error: dateError.message
-      });
-    }
-
-    // Initialize Earth Engine
+    // 3. Initialize GEE
     await initEE();
 
-    console.log('Getting admin geometry...');
-    
-    // Get the region of interest geometry
+    // 4. Get ROI
     const roi = await getAdminGeometry(region, province, municipality);
-    
     if (!roi) {
-      return res.status(400).json({
-        success: false,
-        error: 'Could not create valid geometry for the specified region'
-      });
+      return res.status(400).json({ success: false, error: 'Could not create valid geometry' });
     }
 
-    console.log('Loading Sentinel-1 GRD collection...');
-
-    // Load and filter Sentinel-1 GRD data
+    // 5. SAR Processing
     const collection = ee.ImageCollection('COPERNICUS/S1_GRD')
       .filter(ee.Filter.eq('instrumentMode', 'IW'))
       .filter(ee.Filter.listContains('transmitterReceiverPolarisation', polarization))
       .filter(ee.Filter.eq('orbitProperties_pass', passDirection))
-      .filter(ee.Filter.eq('resolution_meters', 10))
       .filterBounds(roi)
       .select(polarization);
 
-    // Select images by predefined dates
-    const beforeCollection = collection.filterDate(defaultBeforeStart, defaultBeforeEnd);
-    const afterCollection = collection.filterDate(defaultAfterStart, defaultAfterEnd);
+    const beforeCol = collection.filterDate(beforeStart, beforeEnd);
+    const afterCol = collection.filterDate(afterStart, afterEnd);
 
-    // Check collection sizes
-    const beforeSize = await evaluateEE(beforeCollection.size());
-    const afterSize = await evaluateEE(afterCollection.size());
-
-    console.log(`Before collection size: ${beforeSize}, After collection size: ${afterSize}`);
+    // Parallel processing for performance
+    const [beforeSize, afterSize] = await Promise.all([
+      evaluateEE(beforeCol.size()),
+      evaluateEE(afterCol.size())
+    ]);
 
     if (beforeSize === 0 || afterSize === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Insufficient Sentinel-1 data for the specified dates and region',
-        metadata: {
-          beforePeriod: `${defaultBeforeStart} to ${defaultBeforeEnd}`,
-          afterPeriod: `${defaultAfterStart} to ${defaultAfterEnd}`,
-          beforeImages: beforeSize,
-          afterImages: afterSize,
-          suggestion: 'Try adjusting date ranges or using a different pass direction (ASCENDING/DESCENDING)'
-        }
+        error: 'Insufficient Sentinel-1 data for the specified dates',
+        metadata: { beforeSize, afterSize }
       });
     }
 
-    console.log('Creating mosaics and applying speckle filtering...');
-
-    // Create mosaics and clip to study area
-    const before = beforeCollection.mosaic().clip(roi);
-    const after = afterCollection.mosaic().clip(roi);
-
-    // Apply speckle filtering
-    const beforeFiltered = before.focal_mean(smoothingRadius, 'circle', 'meters');
-    const afterFiltered = after.focal_mean(smoothingRadius, 'circle', 'meters');
-
-    console.log('Calculating flood extent...');
-
-    // Calculate the difference between before and after images
+    // 6. Flood Detection Logic
+    const beforeFiltered = beforeCol.mosaic().clip(roi).focal_mean(smoothingRadius, 'circle', 'meters');
+    const afterFiltered = afterCol.mosaic().clip(roi).focal_mean(smoothingRadius, 'circle', 'meters');
+    
     const difference = afterFiltered.divide(beforeFiltered);
+    let flooded = difference.gt(diffThreshold);
 
-    // Apply threshold to create binary flood mask
-    const differenceBinary = difference.gt(parseFloat(differenceThreshold));
-
-    // Refine flood extent using additional datasets
-    console.log('Refining flood extent with water masks and terrain...');
-
-    // Include JRC layer on surface water seasonality
-    // Mask areas of permanent water (water > 10 months/year)
+    // Masking & Refinement
     const swater = ee.Image('JRC/GSW1_0/GlobalSurfaceWater').select('seasonality');
-    const swaterMask = swater.gte(10).updateMask(swater.gte(10));
+    const terrain = ee.Algorithms.Terrain(ee.Image('WWF/HydroSHEDS/03VFDEM'));
+    
+    flooded = flooded
+      .where(swater.gte(10), 0) // Remove permanent water
+      .updateMask(terrain.select('slope').lt(slopeThreshold)) // Remove steep slopes
+      .updateMask(flooded);
 
-    // Remove permanent water bodies from flood extent
-    let flooded = differenceBinary.where(swaterMask, 0);
-    flooded = flooded.updateMask(flooded);
-
-    // Apply connectivity filter to reduce noise
     const connections = flooded.connectedPixelCount();
-    flooded = flooded.updateMask(connections.gte(parseInt(connectedPixelThreshold)));
+    flooded = flooded.updateMask(connections.gte(connectedThreshold));
 
-    // Mask out steep slopes using DEM
-    const DEM = ee.Image('WWF/HydroSHEDS/03VFDEM');
-    const terrain = ee.Algorithms.Terrain(DEM);
-    const slope = terrain.select('slope');
-    flooded = flooded.updateMask(slope.lt(parseInt(slopeThreshold)));
-
-    console.log('Calculating flood statistics...');
-
-    // Calculate flood extent area
-    const floodPixelArea = flooded
-      .select(polarization)
-      .multiply(ee.Image.pixelArea());
-
-    // Sum the areas of flooded pixels
-    const floodStats = floodPixelArea.reduceRegion({
+    // 7. Generate Response Data (Patterned with LULC Metadata)
+    const floodStats = flooded.multiply(ee.Image.pixelArea()).reduceRegion({
       reducer: ee.Reducer.sum(),
       geometry: roi,
       scale: 10,
@@ -192,137 +122,44 @@ export default async function handler(req, res) {
       bestEffort: true
     });
 
-    // Convert to hectares
-    const floodAreaHa = await evaluateEE(
-      ee.Number(floodStats.get(polarization))
-        .divide(10000)
-        .round()
-    );
+    const [floodAreaHa, geometryInfo, beforeMap, afterMap, floodMap] = await Promise.all([
+      evaluateEE(ee.Number(floodStats.get(polarization)).divide(10000).round()),
+      getGeometryInfo(roi),
+      getMapPromise(beforeFiltered, { min: -25, max: 0, palette: ['000000', 'FFFFFF'] }),
+      getMapPromise(afterFiltered, { min: -25, max: 0, palette: ['000000', 'FFFFFF'] }),
+      getMapPromise(flooded, { min: 0, max: 1, palette: ['0000FF'] })
+    ]);
 
-    console.log(`Calculated flood area: ${floodAreaHa} hectares`);
-
-    // Get visualization parameters
-    const sarVis = {
-      min: -25,
-      max: 0,
-      palette: ['000000', 'FFFFFF']
-    };
-
-    const floodVis = {
-      min: 0,
-      max: 1,
-      palette: ['0000FF']
-    };
-
-    const differenceVis = {
-      min: 0,
-      max: 2,
-      palette: ['0000FF', 'FFFFFF', 'FF0000']
-    };
-
-    console.log('Generating map URLs...');
-
-    // Get map URLs for visualization
-    const beforeUrl = beforeFiltered.getMap(sarVis);
-    const afterUrl = afterFiltered.getMap(sarVis);
-    const differenceUrl = difference.getMap(differenceVis);
-    const floodedUrl = flooded.getMap(floodVis);
-
-    // Get geometry info
-    const geometryInfo = await getGeometryInfo(roi);
-
-    // Get date ranges for the collections
-    const getDateRange = async (imageCollection) => {
-      try {
-        const range = await evaluateEE(
-          imageCollection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
-        );
-        return {
-          start: new Date(range.min).toISOString().split('T')[0],
-          end: new Date(range.max).toISOString().split('T')[0]
-        };
-      } catch (error) {
-        return null;
-      }
-    };
-
-    const beforeDateRange = await getDateRange(beforeCollection);
-    const afterDateRange = await getDateRange(afterCollection);
-
-    // Send successful response
     res.status(200).json({
       success: true,
       maps: {
-        before: beforeUrl,
-        after: afterUrl,
-        difference: differenceUrl,
-        flooded: floodedUrl
+        before: beforeMap.urlFormat,
+        after: afterMap.urlFormat,
+        flooded: floodMap.urlFormat,
+        floodMapId: floodMap.mapid
       },
       center: geometryInfo.center,
       bounds: geometryInfo.bounds,
       zoom: geometryInfo.zoom,
       statistics: {
         floodedAreaHa: floodAreaHa || 0,
-        floodedAreaKm2: (floodAreaHa / 100).toFixed(2)
+        floodedAreaKm2: ((floodAreaHa || 0) / 100).toFixed(2)
       },
       metadata: {
-        analysis: {
-          beforePeriod: beforeDateRange || {
-            start: defaultBeforeStart,
-            end: defaultBeforeEnd
-          },
-          afterPeriod: afterDateRange || {
-            start: defaultAfterStart,
-            end: defaultAfterEnd
-          },
-          beforeImages: beforeSize,
-          afterImages: afterSize
-        },
-        location: {
-          region: region || 'Philippines',
-          province: province || null,
-          municipality: municipality || null
-        },
-        parameters: {
-          polarization: polarization,
-          passDirection: passDirection,
-          differenceThreshold: parseFloat(differenceThreshold),
-          smoothingRadius: parseInt(smoothingRadius),
-          slopeThreshold: parseInt(slopeThreshold),
-          connectedPixelThreshold: parseInt(connectedPixelThreshold)
-        },
-        satellite: 'Sentinel-1',
-        sensor: 'C-band Synthetic Aperture Radar',
-        resolution: '10m',
-        methodology: 'Change detection using SAR backscatter intensity',
-        interpretation: {
-          'Blue areas': 'Potentially flooded areas',
-          'Excluded': 'Permanent water bodies, steep slopes (>' + slopeThreshold + '°)',
-          'Filtering': 'Speckle filter (' + smoothingRadius + 'm radius), connectivity filter (>' + connectedPixelThreshold + ' pixels)'
-        },
-        disclaimer: 'Disclaimer: This product has been derived automatically without validation data. All geographic information has limitations due to the scale, resolution, date and interpretation of the original source materials. No liability concerning the content or the use thereof is assumed by the producer.',
-        script_author: "UN-SPIDER Decembe 2019"
+        beforePeriod: { start: beforeStart, end: beforeEnd },
+        afterPeriod: { start: afterStart, end: afterEnd },
+        region: region || 'Philippines',
+        dataset: 'Sentinel-1 GRD / UN-SPIDER Methodology',
+        parameters: { polarization, diffThreshold, slopeThreshold }
       }
     });
 
-    
   } catch (error) {
-    console.error('API Error:', error);
-
-    // Send error response
+    console.error('Flood API Error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Internal server error',
-      timestamp: new Date().toISOString(),
-      requestParams: {
-        beforeStart: req.query.beforeStart,
-        beforeEnd: req.query.beforeEnd,
-        afterStart: req.query.afterStart,
-        afterEnd: req.query.afterEnd,
-        region: req.query.region,
-        province: req.query.province,
-        municipality: req.query.municipality
-      }
+      timestamp: new Date().toISOString()
     });
   }
-};
+}

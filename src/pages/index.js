@@ -225,7 +225,8 @@ export default function Home() {
         // transfer to handle date change
         var beforeS = getOneMonthBefore(start);
         var beforeE = start;
-        var beforeStart = getOneMonthBefore(end);
+
+        var afterS = getOneMonthBefore(end);
         var afterE = end;
 
 
@@ -375,6 +376,7 @@ export default function Home() {
   };
 
   const handleUpdateMap = (start, end) => {
+    
     fetchMapData(start, end, selectedLayer);
   };
 
