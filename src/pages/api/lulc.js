@@ -5,28 +5,12 @@ import {
     getAdminGeometry,
     getDateBoundaries,
     getGeometryInfo,
-    initializeEE,
+    initEE,
     isValidDate
 } from './function';
+import { withApiGuards } from '../../lib/apiGuards';
 
-// Check for environment variable outside the handler to fail fast on cold starts
-  if (!process.env.GOOGLE_SERVICE_KEY) {
-    throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
-  }
-
-  const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
-  let isInitialized = false;
-
-  /**
-   * Wrapper for Earth Engine initialization
-   */
-  const initEE = async () => {
-    if (isInitialized) return;
-    await initializeEE(privateKey);
-    isInitialized = true;
-  };
-
-  export default async function handler(req, res) {
+async function handler(req, res) {
     // Only allow GET requests
     if (req.method !== 'GET') {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -70,9 +54,6 @@ import {
         .filterBounds(roi);
 
       const collectionSize = await evaluateEE(lulcCollection.size());
-
-      console.log(collectionSize);
-
 
       if (collectionSize === 0) {
         return res.status(404).json({
@@ -129,4 +110,6 @@ import {
         timestamp: new Date().toISOString()
       });
     }
-  }
+}
+
+export default withApiGuards(handler);

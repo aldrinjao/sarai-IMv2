@@ -1,10 +1,4 @@
 const ee = require('@google/earthengine');
-// Or with better error handling:
-if (!process.env.GOOGLE_SERVICE_KEY) {
-  throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
-}
-const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
-
 
 const {
   isValidDate,
@@ -12,19 +6,10 @@ const {
   evaluateEE,
   getGeometryInfo,
   getAdminGeometry,
-  initializeEE
+  initEE
 } = require('./function');
 
-let isInitialized = false;
-
-// Wrapper for Earth Engine initialization to handle state
-const initEE = async () => {
-  if (isInitialized) {
-    return;
-  }
-  await initializeEE(privateKey);
-  isInitialized = true;
-};
+const { withApiGuards } = require('../../lib/apiGuards');
 
 // Helper function to get calendar day of year (1-365/366)
 const getCalendarDay = (dateString) => {
@@ -43,7 +28,7 @@ const normalizeCalendarDay = (calendarDay, isLeapYear) => {
 };
 
 // Main handler function
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     console.log('NDVI Time Series API endpoint called');
 
@@ -211,41 +196,6 @@ export default async function handler(req, res) {
 
         console.log(`Generating ${sampleIndices.length} sample maps from ${timeSeriesData.length} time points`);
 
-        // for (let i = 0; i < sampleIndices.length; i++) {
-        //   try {
-        //     const dataPoint = timeSeriesData[sampleIndices[i]];
-        //     const dateString = dataPoint.date;
-
-        //     // Create date range for filtering (16-day window to match MODIS composite)
-        //     const startDate = new Date(dateString);
-        //     const endDate = new Date(startDate);
-        //     endDate.setDate(endDate.getDate() + 16);
-
-        //     // Filter collection to get image for this specific date
-        //     const dateFilteredImage = ndviCollection
-        //       .filterDate(startDate.toISOString().split('T')[0], 
-        //                  endDate.toISOString().split('T')[0])
-        //       .sort('system:time_start')
-        //       .first()
-        //       .select('NDVI')
-        //       .clip(roi);
-
-        //     const mapUrl = dateFilteredImage.getMap(visParams);
-
-        //     timeSeriesMaps.push({
-        //       date: dateString,
-        //       url: mapUrl.urlFormat || mapUrl,
-        //       timestamp: dataPoint.timestamp
-        //     });
-
-        //     console.log(`Generated map ${i + 1}/${sampleIndices.length} for ${dateString}`);
-
-        //   } catch (error) {
-        //     console.warn(`Failed to generate map for date ${timeSeriesData[sampleIndices[i]]?.date}:`, error.message);
-        //   }
-        // }
-
-
         const mapPromises = sampleIndices.map(async (idx) => {
           try {
             const dataPoint = timeSeriesData[idx];
@@ -379,4 +329,8 @@ export default async function handler(req, res) {
       }
     });
   }
-};
+}
+
+// NDVI time series is the most expensive route — cache successful responses
+// for 2 hours (MODIS composites are 16-day, so tiles are stable well beyond this).
+export default withApiGuards(handler, { ttlMs: 2 * 60 * 60 * 1000 });

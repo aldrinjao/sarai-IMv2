@@ -52,7 +52,7 @@ jobs:
 
             # 4. Install and Build
             echo "🚀 Installing dependencies and building..."
-            npm install
+            npm ci
             npm run build
 
             # 5. Smart PM2 Start/Restart

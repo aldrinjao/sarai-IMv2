@@ -1,5 +1,6 @@
 # Use an official Node runtime as a parent image
-FROM node:16-alpine
+# Pinned to match .nvmrc (Node 18.12.0)
+FROM node:18.12.0-alpine
 
 ENV BUILD_STANDALONE true
 
@@ -9,8 +10,8 @@ WORKDIR /usr/src/app
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies from the lockfile for reproducible builds
+RUN npm ci
 
 # Bundle app source
 COPY . .
