@@ -29,7 +29,7 @@ const Header = () => {
       <Container className={styles.headerContainer}>
         <p className={styles.headerTitle}>
           <Link href="/">
-            <img src="/assets/sarai-logo.png" width={320} />
+            <img src="/assets/sarai-logo.png" width={320} alt="SARAI" />
           </Link>
         </p>
         <ul className={styles.headerLinks}>
@@ -92,7 +92,7 @@ const Header = () => {
             </div>
           </li>
           <li>
-            <img src="/assets/dost-pcaarrd-uplb.png" width={160} />
+            <img src="/assets/dost-pcaarrd-uplb.png" width={160} alt="DOST-PCAARRD and UPLB" />
           </li>
 
         </ul>

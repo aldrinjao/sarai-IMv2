@@ -71,9 +71,6 @@ import {
 
       const collectionSize = await evaluateEE(lulcCollection.size());
 
-      console.log(collectionSize);
-
-
       if (collectionSize === 0) {
         return res.status(404).json({
           success: false,

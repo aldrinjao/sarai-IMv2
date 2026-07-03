@@ -1,5 +1,6 @@
 const ee = require('@google/earthengine');
-// Or with better error handling:
+
+// Fail fast on cold start if the service-account key is missing
 if (!process.env.GOOGLE_SERVICE_KEY) {
   throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
 }
@@ -210,41 +211,6 @@ export default async function handler(req, res) {
         }
 
         console.log(`Generating ${sampleIndices.length} sample maps from ${timeSeriesData.length} time points`);
-
-        // for (let i = 0; i < sampleIndices.length; i++) {
-        //   try {
-        //     const dataPoint = timeSeriesData[sampleIndices[i]];
-        //     const dateString = dataPoint.date;
-
-        //     // Create date range for filtering (16-day window to match MODIS composite)
-        //     const startDate = new Date(dateString);
-        //     const endDate = new Date(startDate);
-        //     endDate.setDate(endDate.getDate() + 16);
-
-        //     // Filter collection to get image for this specific date
-        //     const dateFilteredImage = ndviCollection
-        //       .filterDate(startDate.toISOString().split('T')[0], 
-        //                  endDate.toISOString().split('T')[0])
-        //       .sort('system:time_start')
-        //       .first()
-        //       .select('NDVI')
-        //       .clip(roi);
-
-        //     const mapUrl = dateFilteredImage.getMap(visParams);
-
-        //     timeSeriesMaps.push({
-        //       date: dateString,
-        //       url: mapUrl.urlFormat || mapUrl,
-        //       timestamp: dataPoint.timestamp
-        //     });
-
-        //     console.log(`Generated map ${i + 1}/${sampleIndices.length} for ${dateString}`);
-
-        //   } catch (error) {
-        //     console.warn(`Failed to generate map for date ${timeSeriesData[sampleIndices[i]]?.date}:`, error.message);
-        //   }
-        // }
-
 
         const mapPromises = sampleIndices.map(async (idx) => {
           try {

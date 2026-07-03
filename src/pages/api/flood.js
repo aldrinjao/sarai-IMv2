@@ -14,7 +14,6 @@ if (!process.env.GOOGLE_SERVICE_KEY) {
   throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
 }
 
-console.log(11);
 const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
 let isInitialized = false;
 
@@ -122,12 +121,13 @@ export default async function handler(req, res) {
       bestEffort: true
     });
 
-    const [floodAreaHa, geometryInfo, beforeMap, afterMap, floodMap] = await Promise.all([
+    const [floodAreaHa, geometryInfo, beforeMap, afterMap, floodMap, differenceMap] = await Promise.all([
       evaluateEE(ee.Number(floodStats.get(polarization)).divide(10000).round()),
       getGeometryInfo(roi),
       getMapPromise(beforeFiltered, { min: -25, max: 0, palette: ['000000', 'FFFFFF'] }),
       getMapPromise(afterFiltered, { min: -25, max: 0, palette: ['000000', 'FFFFFF'] }),
-      getMapPromise(flooded, { min: 0, max: 1, palette: ['0000FF'] })
+      getMapPromise(flooded, { min: 0, max: 1, palette: ['0000FF'] }),
+      getMapPromise(difference, { min: 0, max: 2, palette: ['0000FF', 'FFFFFF', 'FF0000'] })
     ]);
 
     res.status(200).json({
@@ -136,6 +136,7 @@ export default async function handler(req, res) {
         before: beforeMap.urlFormat,
         after: afterMap.urlFormat,
         flooded: floodMap.urlFormat,
+        difference: differenceMap.urlFormat,
         floodMapId: floodMap.mapid
       },
       center: geometryInfo.center,
