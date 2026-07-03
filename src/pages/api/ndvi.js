@@ -95,23 +95,25 @@ async function handler(req, res) {
     console.log('Creating median composite map...');
     const ndviImage = ndviCollection.median().clip(roi);
 
-    // NDVI color palette (red to green)
+    // NDVI color palette: diverging red -> yellow -> green (RdYlGn).
+    // Low NDVI (bare/urban/water) reads red/orange, healthy vegetation green,
+    // so a mostly-vegetated scene isn't a uniform wash of green.
     const ndviVis = [
-      '#FFFFFF', // White (Min NDVI: 0)
-      '#f7fcf5', // Very pale green
-      '#e5f5e0',
-      '#c7e9c0',
-      '#a1d99b',
-      '#74c476',
-      '#41ab5d',
-      '#238b45',
-      '#006d2c',
-      '#00441b'  // Deep Dark Green (Max NDVI: 0.8/1.0)
+      '#a50026', // Deep red  (Min NDVI: 0)
+      '#d73027',
+      '#f46d43', // Orange
+      '#fdae61',
+      '#fee08b', // Pale yellow
+      '#d9ef8b',
+      '#a6d96a',
+      '#66bd63', // Green
+      '#1a9850',
+      '#006837'  // Deep green (Max NDVI: 0.9)
     ];
 
     const visParams = {
       min: 0,
-      max: 8000,
+      max: 9000, // raw NDVI (scale 0.0001) => 0.0 .. 0.9, avoids over-saturating dense vegetation
       palette: ndviVis
     };
 
@@ -289,9 +291,10 @@ async function handler(req, res) {
         totalDays: Math.ceil((new Date(finalEndDate) - new Date(finalStartDate)) / (1000 * 60 * 60 * 24)),
         ndviScale: {
           min: 0,
-          max: 8000,
-          realMin: -0.2,
-          realMax: 1.0,
+          max: 9000,
+          realMin: 0.0,
+          realMax: 0.9,
+          palette: 'RdYlGn',
           description: 'Normalized Difference Vegetation Index'
         },
         interpretation: {
