@@ -43,8 +43,12 @@ async function handler(req, res) {
     if (![beforeStart, beforeEnd, afterStart, afterEnd].every(isValidDate)) {
       return res.status(400).json({ success: false, error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
-    getDateBoundaries(beforeStart, beforeEnd);
-    getDateBoundaries(afterStart, afterEnd);
+    try {
+      getDateBoundaries(beforeStart, beforeEnd);
+      getDateBoundaries(afterStart, afterEnd);
+    } catch (dateError) {
+      return res.status(400).json({ success: false, error: dateError.message });
+    }
 
     // 3. Initialize GEE
     await initEE();

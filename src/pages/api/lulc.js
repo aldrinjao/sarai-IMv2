@@ -30,7 +30,11 @@ async function handler(req, res) {
       }
 
       // Validate range logic
-      getDateBoundaries(finalStartDate, finalEndDate);
+      try {
+        getDateBoundaries(finalStartDate, finalEndDate);
+      } catch (dateError) {
+        return res.status(400).json({ success: false, error: dateError.message });
+      }
 
       // 2. Initialize GEE
       await initEE();
