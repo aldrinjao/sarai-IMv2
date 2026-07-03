@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import Button from '@mui/material/Button';
 import Container from '@components/Container';
@@ -33,35 +33,6 @@ const Header = () => {
           </Link>
         </p>
         <ul className={styles.headerLinks}>
-          <li>
-            <div>
-              <Button
-                id="basic-button"
-                aria-controls={open ? 'basic-menu' : undefined}
-                aria-haspopup="true"
-                aria-expanded={open ? 'true' : undefined}
-                onClick={handleClick}
-                startIcon={<KeyboardArrowDownIcon />}
-                style={{ color: 'white' }}
-              >
-                Dashboard
-              </Button>
-              <Menu
-                id="basic-menu"
-                anchorEl={anchorEl}
-                open={open}
-                onClose={handleClose}
-                MenuListProps={{
-                  'aria-labelledby': 'basic-button',
-                }}
-                sx={menu_style}
-              >
-                <MenuItem onClick={handleClose}>Profile</MenuItem>
-                <MenuItem onClick={handleClose}>My account</MenuItem>
-                <MenuItem onClick={handleClose}>Logout</MenuItem>
-              </Menu>
-            </div>
-          </li>
           <li>
             <div>
               <Button
