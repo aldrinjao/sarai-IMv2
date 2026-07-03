@@ -37,6 +37,23 @@ Without a valid `GOOGLE_SERVICE_KEY` the app UI still loads, but every data
 layer (NDVI / LULC / Flood) returns a 500 — see `.env.example` for how to
 obtain the key.
 
+## API behavior
+
+The three Earth Engine routes run expensive GEE computations, so each is wrapped
+with shared guards (`src/lib/apiGuards.js`) that add:
+
+- **Response caching** — successful `GET` responses are memoized in-process,
+  keyed on the route + query params. Responses carry an `X-Cache: HIT|MISS`
+  header. TTL is 30 min by default; NDVI uses 2 h (MODIS composites are 16-day,
+  so tiles stay valid far longer).
+- **Rate limiting** — 30 requests/min per client IP (read via `X-Forwarded-For`
+  behind the proxy). Responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`;
+  over-limit callers get `429` with a `Retry-After` header.
+
+State is in-process, which suits the single PM2 instance used in production. If
+the app is ever scaled to PM2 cluster mode, each worker keeps its own cache and
+limiter — a shared store (e.g. Redis) would be the upgrade path.
+
 ## Scripts
 
 | Command         | Description                    |
