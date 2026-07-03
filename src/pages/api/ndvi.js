@@ -331,5 +331,6 @@ async function handler(req, res) {
   }
 }
 
-// NDVI time series is the most expensive route — cache successful responses.
-export default withApiGuards(handler);
+// NDVI time series is the most expensive route — cache successful responses
+// for 2 hours (MODIS composites are 16-day, so tiles are stable well beyond this).
+export default withApiGuards(handler, { ttlMs: 2 * 60 * 60 * 1000 });
