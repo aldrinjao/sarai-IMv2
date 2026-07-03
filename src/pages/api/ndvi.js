@@ -9,6 +9,8 @@ const {
   initEE
 } = require('./function');
 
+const { withApiGuards } = require('../../lib/apiGuards');
+
 // Helper function to get calendar day of year (1-365/366)
 const getCalendarDay = (dateString) => {
   const date = new Date(dateString);
@@ -26,7 +28,7 @@ const normalizeCalendarDay = (calendarDay, isLeapYear) => {
 };
 
 // Main handler function
-export default async function handler(req, res) {
+async function handler(req, res) {
   try {
     console.log('NDVI Time Series API endpoint called');
 
@@ -327,4 +329,7 @@ export default async function handler(req, res) {
       }
     });
   }
-};
+}
+
+// NDVI time series is the most expensive route — cache successful responses.
+export default withApiGuards(handler);

@@ -8,8 +8,9 @@ import {
     initEE,
     isValidDate
 } from './function';
+import { withApiGuards } from '../../lib/apiGuards';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
     // Only allow GET requests
     if (req.method !== 'GET') {
       return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -109,4 +110,6 @@ export default async function handler(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-  }
+}
+
+export default withApiGuards(handler);

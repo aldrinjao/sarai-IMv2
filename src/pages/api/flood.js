@@ -8,6 +8,7 @@ import {
   initEE,
   isValidDate
 } from './function';
+import { withApiGuards } from '../../lib/apiGuards';
 
 const getMapPromise = (image, visParams) => {
   return new Promise((resolve, reject) => {
@@ -18,7 +19,7 @@ const getMapPromise = (image, visParams) => {
   });
 };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
@@ -150,3 +151,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export default withApiGuards(handler);
