@@ -1,12 +1,25 @@
 const ee = require('@google/earthengine');
 
-// Utility function to validate date format
+// Utility function to validate a YYYY-MM-DD date string.
+// Rejects impossible calendar dates (e.g. 2023-02-30, 2023-13-01) — a plain
+// `new Date()` silently rolls those over (Feb 30 -> Mar 2), so we verify the
+// parsed components round-trip back to the input.
 const isValidDate = (dateString) => {
-  const date = new Date(dateString);
-  return date instanceof Date && !isNaN(date) && dateString.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (typeof dateString !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return false;
+  }
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 };
 
-// Utility function to get date range boundaries
+// Utility function to validate a date range and return its boundaries.
+// Throws with a descriptive message on any impossible/unusable range so the
+// route can surface a 400 instead of failing deep inside Earth Engine.
 const getDateBoundaries = (startDate, endDate) => {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -14,6 +27,15 @@ const getDateBoundaries = (startDate, endDate) => {
   // Ensure end date is after start date
   if (end <= start) {
     throw new Error('End date must be after start date');
+  }
+
+  // No satellite data exists for future dates
+  const now = new Date();
+  if (start > now) {
+    throw new Error('Start date cannot be in the future');
+  }
+  if (end > now) {
+    throw new Error('End date cannot be in the future');
   }
 
   // Check if date range is reasonable (not more than 10 years)
