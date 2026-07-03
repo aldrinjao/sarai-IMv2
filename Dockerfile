@@ -1,5 +1,6 @@
 # Use an official Node runtime as a parent image
-FROM node:16-alpine
+# Pinned to match .nvmrc (Node 18.12.0)
+FROM node:18.12.0-alpine
 
 ENV BUILD_STANDALONE true
 
