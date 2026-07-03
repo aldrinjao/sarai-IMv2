@@ -5,23 +5,9 @@ import {
   getAdminGeometry,
   getDateBoundaries,
   getGeometryInfo,
-  initializeEE,
+  initEE,
   isValidDate
 } from './function';
-
-// Fail-fast environment check
-if (!process.env.GOOGLE_SERVICE_KEY) {
-  throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
-}
-
-const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
-let isInitialized = false;
-
-const initEE = async () => {
-  if (isInitialized) return;
-  await initializeEE(privateKey);
-  isInitialized = true;
-};
 
 const getMapPromise = (image, visParams) => {
   return new Promise((resolve, reject) => {

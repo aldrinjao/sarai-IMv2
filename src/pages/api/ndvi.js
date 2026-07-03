@@ -1,31 +1,13 @@
 const ee = require('@google/earthengine');
 
-// Fail fast on cold start if the service-account key is missing
-if (!process.env.GOOGLE_SERVICE_KEY) {
-  throw new Error('GOOGLE_SERVICE_KEY environment variable is not set');
-}
-const privateKey = JSON.parse(process.env.GOOGLE_SERVICE_KEY);
-
-
 const {
   isValidDate,
   getDateBoundaries,
   evaluateEE,
   getGeometryInfo,
   getAdminGeometry,
-  initializeEE
+  initEE
 } = require('./function');
-
-let isInitialized = false;
-
-// Wrapper for Earth Engine initialization to handle state
-const initEE = async () => {
-  if (isInitialized) {
-    return;
-  }
-  await initializeEE(privateKey);
-  isInitialized = true;
-};
 
 // Helper function to get calendar day of year (1-365/366)
 const getCalendarDay = (dateString) => {
