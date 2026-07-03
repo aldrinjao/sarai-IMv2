@@ -88,6 +88,9 @@ export default function Home() {
   const [selectedFloodView, setSelectedFloodView] = useState('flooded'); // 'before', 'after', 'difference', 'flooded'
   const [floodStatistics, setFloodStatistics] = useState(null);
 
+  // Rainfall-specific state
+  const [rainfallStats, setRainfallStats] = useState(null);
+
 
 
   function getOneMonthBefore(dateStr) {
@@ -145,7 +148,7 @@ export default function Home() {
       setCalendarDayAverages([]);
       setSelectedDate(null);
       setShowModal(false);
-    } else if (selectedLayer === 'flood') {
+    } else if (selectedLayer === 'flood' || selectedLayer === 'rainfall') {
       setIsLegendVisible(true);
       setIsGraphVisible(false);
       setIsTimeControllerVisible(false);
@@ -233,7 +236,7 @@ export default function Home() {
         endpoint = '/api/flood';
         queryParams = `beforeStart=${beforeS}&beforeEnd=${beforeE}&afterStart=${afterS}&afterEnd=${afterE}`;
       } else {
-        endpoint = layerType === 'ndvi' ? '/api/ndvi' : '/api/lulc';
+        endpoint = `/api/${layerType}`; // ndvi | lulc | rainfall
         queryParams = `startDate=${start}&endDate=${end}`;
         if (layerType === 'ndvi') {
           queryParams += '&includeTimeSeries=true';
@@ -274,9 +277,14 @@ export default function Home() {
           // Store flood statistics
           setFloodStatistics(response.data.statistics);
         } else {
-          // Handle NDVI and LULC as before
+          // Handle NDVI, LULC and rainfall (single tile URL)
           const url = response.data.tileUrlTemplate || response.data.mapUrl?.urlFormat || response.data.mapUrl;
           setMapUrl(url);
+
+          // Rainfall returns accumulated-precipitation statistics
+          if (layerType === 'rainfall') {
+            setRainfallStats(response.data.statistics || null);
+          }
 
           // Handle time series data for NDVI
           if (layerType === 'ndvi' && response.data.timeSeries) {
@@ -352,6 +360,9 @@ export default function Home() {
     });
     setFloodStatistics(null);
     setSelectedFloodView('flooded');
+
+    // Reset rainfall-specific state
+    setRainfallStats(null);
   };
 
   const handleRegionChange = (regionId) => {
@@ -617,6 +628,53 @@ export default function Home() {
                 </div>
               </div>
             )}
+            <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #dee2e6', fontSize: '11px', color: '#6c757d', lineHeight: '1.4' }}>
+              Flood detection follows the{' '}
+              <a
+                href="https://www.un-spider.org/advisory-support/recommended-practices/recommended-practice-google-earth-engine-flood-mapping"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#0066cc', textDecoration: 'underline' }}
+              >
+                UN-SPIDER Recommended Practice
+              </a>{' '}
+              (Sentinel-1 SAR).
+            </div>
+            <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: '6px', fontSize: '11px', color: '#856404', lineHeight: '1.4' }}>
+              <strong>⚠️ Accuracy:</strong> This is a change-detection estimate, not
+              a confirmed flood map. When no real flood occurred, the method can
+              still flag <strong>false positives</strong> — e.g. calm or
+              wind-roughened water, wet or freshly plowed fields, and seasonal
+              soil-moisture or backscatter changes. Compare the “before” period
+              and treat results as indicative pending ground validation.
+            </div>
+          </div>
+        )}
+
+        {/* Rainfall statistics readout */}
+        {selectedLayer === 'rainfall' && rainfallStats && (
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(255, 255, 255, 0.95)',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            minWidth: '180px'
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#343a40', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🌧️</span> Accumulated Rainfall
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#495057', marginBottom: '4px' }}>
+              <span>Area mean</span>
+              <strong style={{ color: '#3730a3' }}>{rainfallStats.meanRainfallMm ?? '—'} mm</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#495057' }}>
+              <span>Area max</span>
+              <strong style={{ color: '#6366f1' }}>{rainfallStats.maxRainfallMm ?? '—'} mm</strong>
+            </div>
           </div>
         )}
 

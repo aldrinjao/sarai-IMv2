@@ -38,8 +38,8 @@ const ControlPanel = ({
     {
       id: 'ndvi',
       name: 'NDVI',
-      fullName: 'Normalized Difference Vegetation Index',
-      description: 'Measure of vegetation health and density with time series analysis',
+      fullName: 'Vegetation Index',
+      description: 'Vegetation health and density, with time series analysis',
       color: '#22c55e',
       icon: '🌱',
       features: ['Time Series', 'Calendar Patterns', 'Animation']
@@ -47,8 +47,8 @@ const ControlPanel = ({
     {
       id: 'lulc',
       name: 'LULC',
-      fullName: 'Land Use Land Cover',
-      description: 'Classification of land surface into different cover types',
+      fullName: 'Land Use / Land Cover',
+      description: 'Classification of the land surface into cover types',
       color: '#3b82f6',
       icon: '🗺️',
       features: ['Land Classification', 'Cover Types', 'Static Analysis']
@@ -57,16 +57,25 @@ const ControlPanel = ({
       id: 'flood',
       name: 'Flood',
       fullName: 'Flood Mapping',
-      description: 'Mapping of possible flooding event ',
-      color: '#3b82f6',
-      icon: '🗺️',
-      features: ['Land Classification', 'Cover Types', 'Static Analysis']
+      description: 'Sentinel-1 SAR flood extent detection',
+      color: '#0ea5e9',
+      icon: '🌊',
+      features: ['SAR Detection', 'Before / After', 'Flood Extent']
+    },
+    {
+      id: 'rainfall',
+      name: 'Rainfall',
+      fullName: 'Near-Real-Time Rainfall',
+      description: 'GSMaP accumulated precipitation (~4h latency)',
+      color: '#6366f1',
+      icon: '🌧️',
+      features: ['Near Real Time', 'Accumulated mm', 'Hourly Source']
     }
   ];
 
   const presetYears = ['2020', '2021', '2022', '2023'];
 
-  // Layer Selection View
+  // Layer Selection View — compact grid sized to fit without scrolling
   if (!selectedLayer) {
     return (
       <div style={{
@@ -74,14 +83,16 @@ const ControlPanel = ({
         backgroundColor: '#f8f9fa',
         padding: '20px',
         borderRight: '1px solid #dee2e6',
-        overflowY: 'auto',
-        height: '100vh'
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box'
       }}>
         {/* Header */}
-        <div style={{ marginBottom: '30px' }}>
+        <div style={{ marginBottom: '20px' }}>
           <h3 style={{
-            margin: '0 0 10px 0',
-            fontSize: '26px',
+            margin: '0 0 6px 0',
+            fontSize: '24px',
             fontWeight: '600',
             color: '#343a40'
           }}>
@@ -89,146 +100,111 @@ const ControlPanel = ({
           </h3>
           <p style={{
             margin: 0,
-            fontSize: '14px',
+            fontSize: '13px',
             color: '#6c757d',
-            lineHeight: '1.5'
+            lineHeight: '1.4'
           }}>
             Select a layer to explore satellite imagery and analysis tools.
           </p>
         </div>
 
-        {/* Layer Selection */}
-        <div style={{ marginBottom: '30px' }}>
-          <h4 style={{
-            margin: '0 0 20px 0',
-            fontSize: '16px',
-            fontWeight: '500',
-            color: '#495057'
-          }}>
-            Choose Data Layer
-          </h4>
+        {/* Layer Selection — 2-column grid */}
+        <h4 style={{
+          margin: '0 0 12px 0',
+          fontSize: '12px',
+          fontWeight: '600',
+          color: '#6c757d',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          Choose Data Layer
+        </h4>
 
-          <div style={{ display: 'grid', gap: '10px' }}>
-            {layerOptions.map((layer) => (
-              <button
-                key={layer.id}
-                onClick={() => handleLayerChange(layer.id)}
-                style={{
-                  padding: '20px',
-                  backgroundColor: 'white',
-                  border: '2px solid #e9ecef',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  textAlign: 'left',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.borderColor = layer.color;
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = `0 4px 12px rgba(0,0,0,0.1)`;
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.borderColor = '#e9ecef';
-                  e.target.style.transform = 'translateY(0px)';
-                  e.target.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginBottom: '5px'
-                }}>
-                  <span style={{ fontSize: '24px' }}>{layer.icon}</span>
-                  <div>
-                    <div style={{
-                      fontWeight: '600',
-                      fontSize: '16px',
-                      color: '#343a40'
-                    }}>
-                      {layer.name}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: layer.color,
-                      fontWeight: '500'
-                    }}>
-                      {layer.fullName}
-                    </div>
-                  </div>
-                </div>
-                <p style={{
-                  margin: '0 0 8px 0',
-                  fontSize: '13px',
-                  color: '#6c757d',
-                  lineHeight: '1.4'
-                }}>
-                  {layer.description}
-                </p>
-                
-                {/* Features List */}
-                <div style={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: '4px',
-                  marginTop: '4px'
-                }}>
-                  {layer.features.map((feature, index) => (
-                    <span
-                      key={index}
-                      style={{
-                        fontSize: '10px',
-                        background: `${layer.color}20`,
-                        color: layer.color,
-                        padding: '2px 6px',
-                        borderRadius: '8px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      {feature}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px'
+        }}>
+          {layerOptions.map((layer) => (
+            <button
+              key={layer.id}
+              onClick={() => handleLayerChange(layer.id)}
+              title={layer.description}
+              style={{
+                padding: '16px 12px',
+                backgroundColor: 'white',
+                border: '2px solid #e9ecef',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '6px',
+                minHeight: '104px',
+                justifyContent: 'center'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = layer.color;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#e9ecef';
+                e.currentTarget.style.transform = 'translateY(0px)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <span style={{ fontSize: '30px', lineHeight: 1 }}>{layer.icon}</span>
+              <div style={{
+                fontWeight: '700',
+                fontSize: '15px',
+                color: '#343a40'
+              }}>
+                {layer.name}
+              </div>
+              <div style={{
+                fontSize: '11px',
+                color: layer.color,
+                fontWeight: '600',
+                lineHeight: '1.2'
+              }}>
+                {layer.fullName}
+              </div>
+            </button>
+          ))}
         </div>
 
-        {/* Info Section */}
+        {/* Info Section — compact */}
         <div style={{
-          padding: '20px',
+          marginTop: '16px',
+          padding: '12px 14px',
           backgroundColor: '#e7f3ff',
-          borderRadius: '12px',
-          fontSize: '13px',
+          borderRadius: '10px',
+          fontSize: '12px',
           border: '1px solid #b8daff'
         }}>
           <div style={{
             fontWeight: '600',
             color: '#004085',
-            marginBottom: '8px',
+            marginBottom: '4px',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '6px'
           }}>
             <span>ℹ️</span> Getting Started
           </div>
-          <p style={{
-            margin: 0,
-            color: '#0056b3',
-            lineHeight: '1.4'
-          }}>
-            Select a data layer above to begin exploring satellite imagery. NDVI includes time series analysis and animation features for temporal vegetation monitoring.
+          <p style={{ margin: 0, color: '#0056b3', lineHeight: '1.4' }}>
+            Tap a layer to configure its region and date range. NDVI adds time
+            series and animation; Rainfall shows near-real-time precipitation.
           </p>
         </div>
 
-        {/* Footer */}
+        {/* Footer — pinned to bottom */}
         <div style={{
-          marginTop: '40px',
-          paddingTop: '20px',
+          marginTop: 'auto',
+          paddingTop: '16px',
           borderTop: '1px solid #dee2e6',
           fontSize: '11px',
           color: '#6c757d',
@@ -619,7 +595,13 @@ const ControlPanel = ({
         color: '#6c757d',
         textAlign: 'center'
       }}>
-        {selectedLayer === 'ndvi' ? 'MODIS NDVI satellite data with time series' : 'ESRI Global Land Use Land Cover data'}
+        {selectedLayer === 'ndvi'
+          ? 'MODIS NDVI satellite data with time series'
+          : selectedLayer === 'lulc'
+            ? 'ESRI Global Land Use Land Cover data'
+            : selectedLayer === 'flood'
+              ? 'Sentinel-1 SAR flood mapping (UN-SPIDER method)'
+              : 'JAXA GSMaP near-real-time rainfall data'}
       </div>
     </div>
   );

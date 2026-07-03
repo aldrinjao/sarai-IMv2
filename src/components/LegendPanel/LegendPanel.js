@@ -22,6 +22,19 @@ const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
         { name: 'Clouds', color: '#C8C8C8' },
         { name: 'Rangeland', color: '#C6AD8D' }
       ];
+    } else if (selectedLayer === 'rainfall') {
+      return [
+        { name: 'Dry (0 mm)', color: '#ffffff' },
+        { name: 'Light', color: '#7ec3ff' },
+        { name: 'Moderate', color: '#3a8bff' },
+        { name: 'Heavy', color: '#0b52d4' },
+        { name: 'Very heavy', color: '#7b2ff7' },
+        { name: 'Extreme', color: '#d40b8c' }
+      ];
+    } else if (selectedLayer === 'flood') {
+      return [
+        { name: 'Flooded area', color: '#0000FF' }
+      ];
     }
     return [];
   };
@@ -31,6 +44,10 @@ const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
       return 'NDVI Legend';
     } else if (selectedLayer === 'lulc') {
       return 'Land Cover Classes';
+    } else if (selectedLayer === 'rainfall') {
+      return 'Rainfall (accumulated)';
+    } else if (selectedLayer === 'flood') {
+      return 'Flood Extent';
     }
     return 'Legend';
   };
@@ -40,6 +57,10 @@ const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
       return 'Vegetation index values range from -1 to 1. Higher values indicate healthier, denser vegetation.';
     } else if (selectedLayer === 'lulc') {
       return 'Land use and land cover classification based on satellite imagery analysis.';
+    } else if (selectedLayer === 'rainfall') {
+      return 'Total precipitation (mm) accumulated over the selected period, from JAXA GSMaP.';
+    } else if (selectedLayer === 'flood') {
+      return 'Possible flood extent from Sentinel-1 SAR change detection (UN-SPIDER Recommended Practice). Change detection can yield false positives with no real flooding — treat as indicative.';
     }
     return '';
   };
@@ -115,7 +136,7 @@ const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
               gap: '6px'
             }}>
               <span style={{ fontSize: '16px' }}>
-                {selectedLayer === 'ndvi' ? '🌱' : '🗺️'}
+                {selectedLayer === 'ndvi' ? '🌱' : selectedLayer === 'rainfall' ? '🌧️' : '🗺️'}
               </span>
               {getTitle()}
             </h4>
@@ -190,6 +211,20 @@ const LegendPanel = ({ selectedLayer, isVisible, onToggle }) => {
           }}>
             {selectedLayer === 'ndvi' ? (
               <div>Source: MODIS Satellite Data</div>
+            ) : selectedLayer === 'rainfall' ? (
+              <div>Source: JAXA GSMaP (~11 km, hourly)</div>
+            ) : selectedLayer === 'flood' ? (
+              <div>
+                Source: Sentinel-1 SAR ·{' '}
+                <a
+                  href="https://www.un-spider.org/advisory-support/recommended-practices/recommended-practice-google-earth-engine-flood-mapping"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#0066cc', textDecoration: 'underline' }}
+                >
+                  UN-SPIDER method
+                </a>
+              </div>
             ) : (
               <div>Source: ESRI Land Cover (10m)</div>
             )}
