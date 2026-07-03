@@ -10,8 +10,8 @@ WORKDIR /usr/src/app
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies from the lockfile for reproducible builds
+RUN npm ci
 
 # Bundle app source
 COPY . .
